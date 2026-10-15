@@ -1,121 +1,147 @@
-use std::collections::HashSet;
 use std::error::Error;
-use std::sync::atomic::{AtomicBool, AtomicI8, AtomicU8, Ordering};
-use std::sync::Mutex;
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 
 use midir::{os::unix::VirtualOutput, MidiOutput, MidiOutputConnection};
 
-use crate::mapping::{format_note_name, usage_to_midi_base};
+use crate::mapping::{calculate_key_note, find_key_by_usage};
+use crate::scale::format_midi_note;
+use crate::state::AppState;
 
 pub struct MidiEngine {
     conn: Mutex<MidiOutputConnection>,
-    active_notes: Mutex<HashSet<u8>>,
-    octave_offset: AtomicI8,
-    velocity: AtomicU8,
-    sustain_held: AtomicBool,
+    state: Arc<AppState>,
 }
 
 impl MidiEngine {
-    pub fn new(port_name: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn new(port_name: &str, state: Arc<AppState>) -> Result<Self, Box<dyn Error>> {
         let midi_out = MidiOutput::new("nekoto-client")?;
         let conn = midi_out.create_virtual(port_name)?;
 
         Ok(Self {
             conn: Mutex::new(conn),
-            active_notes: Mutex::new(HashSet::new()),
-            octave_offset: AtomicI8::new(0),
-            velocity: AtomicU8::new(100),
-            sustain_held: AtomicBool::new(false),
+            state,
         })
     }
 
     pub fn handle_key_down(&self, usage: u32) {
-        // Octave down (Z)
-        if usage == 0x1D {
-            let current = self.octave_offset.load(Ordering::SeqCst);
-            if current > -3 {
-                let next = current - 1;
-                self.octave_offset.store(next, Ordering::SeqCst);
-                println!("  [octave] {:+}", next);
-            }
-            return;
-        }
-
-        // Octave up (X)
-        if usage == 0x1B {
-            let current = self.octave_offset.load(Ordering::SeqCst);
-            if current < 3 {
-                let next = current + 1;
-                self.octave_offset.store(next, Ordering::SeqCst);
-                println!("  [octave] {:+}", next);
-            }
-            return;
-        }
-
-        // Velocity down (C)
-        if usage == 0x06 {
-            let current = self.velocity.load(Ordering::SeqCst);
-            let next = current.saturating_sub(10).max(10);
-            self.velocity.store(next, Ordering::SeqCst);
-            println!("  [velocity] {}", next);
-            return;
-        }
-
-        // Velocity up (V)
-        if usage == 0x19 {
-            let current = self.velocity.load(Ordering::SeqCst);
-            let next = (current + 10).min(127);
-            self.velocity.store(next, Ordering::SeqCst);
-            println!("  [velocity] {}", next);
-            return;
-        }
-
-        // Sustain pedal on (Space)
+        // Sustain Pedal (Spacebar)
         if usage == 0x2C {
-            if !self.sustain_held.swap(true, Ordering::SeqCst) {
+            if !self.state.sustain_held.swap(true, Ordering::SeqCst) {
                 self.send_cc(64, 127);
-                println!("  [sustain] on");
+                if let Ok(mut info) = self.state.last_event_info.lock() {
+                    *info = "Sustain ON".to_string();
+                }
+                self.state.request_repaint();
             }
             return;
         }
 
-        // Note triggers
-        if let Some(base_note) = usage_to_midi_base(usage) {
-            let octave = self.octave_offset.load(Ordering::SeqCst);
-            let note = (base_note as i16 + (octave as i16 * 12)).clamp(0, 127) as u8;
+        // In-scale Key mapping
+        if let Some(key) = find_key_by_usage(usage) {
+            let root = self.state.get_root();
+            let scale = self.state.get_scale();
+            let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
+            let right_oct = self.state.right_base_octave.load(Ordering::SeqCst);
 
-            if let Ok(mut active) = self.active_notes.lock() {
-                if active.insert(note) {
-                    let vel = self.velocity.load(Ordering::SeqCst);
-                    self.send_raw(&[0x90, note, vel]);
-                    println!("  ♪ {} on (vel {})", format_note_name(note), vel);
-                }
+            let note = calculate_key_note(key, root, scale, left_oct, right_oct);
+            let vel = self.state.velocity.load(Ordering::SeqCst);
+
+            // Record active state
+            if let Ok(mut held) = self.state.held_notes.lock() {
+                held.insert(usage, note);
             }
+            if let Ok(mut active) = self.state.active_usages.lock() {
+                active.insert(usage);
+            }
+            if let Ok(mut notes) = self.state.active_notes.lock() {
+                notes.insert(note);
+            }
+
+            self.send_raw(&[0x90, note, vel]);
+
+            let note_str = format_midi_note(note);
+            let degree = scale.degree_label(key.degree_index);
+            if let Ok(mut info) = self.state.last_event_info.lock() {
+                *info = format!("♪ [{}] {note_str} ({degree})", key.label);
+            }
+            println!("  ♪ [{}] {note_str:<4} ({degree})", key.label);
+
+            self.state.request_repaint();
         }
     }
 
     pub fn handle_key_up(&self, usage: u32) {
-        // Sustain pedal off (Space)
+        // Sustain Pedal release (Spacebar)
         if usage == 0x2C {
-            if self.sustain_held.swap(false, Ordering::SeqCst) {
+            if self.state.sustain_held.swap(false, Ordering::SeqCst) {
                 self.send_cc(64, 0);
-                println!("  [sustain] off");
+                if let Ok(mut info) = self.state.last_event_info.lock() {
+                    *info = "Sustain OFF".to_string();
+                }
+                self.state.request_repaint();
             }
             return;
         }
 
         // Note release
-        if let Some(base_note) = usage_to_midi_base(usage) {
-            let octave = self.octave_offset.load(Ordering::SeqCst);
-            let note = (base_note as i16 + (octave as i16 * 12)).clamp(0, 127) as u8;
+        let released_note = if let Ok(mut held) = self.state.held_notes.lock() {
+            held.remove(&usage)
+        } else {
+            None
+        };
 
-            if let Ok(mut active) = self.active_notes.lock() {
-                if active.remove(&note) {
-                    self.send_raw(&[0x80, note, 64]);
-                    println!("  ♪ {} off", format_note_name(note));
-                }
+        if let Some(note) = released_note {
+            if let Ok(mut active) = self.state.active_usages.lock() {
+                active.remove(&usage);
             }
+            if let Ok(mut notes) = self.state.active_notes.lock() {
+                notes.remove(&note);
+            }
+
+            self.send_raw(&[0x80, note, 64]);
+            self.state.request_repaint();
         }
+    }
+
+    pub fn trigger_note_on(&self, note: u8) {
+        let vel = self.state.velocity.load(Ordering::SeqCst);
+        if let Ok(mut notes) = self.state.active_notes.lock() {
+            notes.insert(note);
+        }
+        self.send_raw(&[0x90, note, vel]);
+        let note_str = format_midi_note(note);
+        if let Ok(mut info) = self.state.last_event_info.lock() {
+            *info = format!("♪ {note_str} on (vel {vel})");
+        }
+        println!("  ♪ {note_str:<4} on");
+        self.state.request_repaint();
+    }
+
+    pub fn trigger_note_off(&self, note: u8) {
+        if let Ok(mut notes) = self.state.active_notes.lock() {
+            notes.remove(&note);
+        }
+        self.send_raw(&[0x80, note, 64]);
+        self.state.request_repaint();
+    }
+
+    pub fn panic_all_notes(&self) {
+        // Send All Notes Off & Reset Controllers
+        self.send_cc(123, 0);
+        self.send_cc(120, 0);
+
+        if let Ok(mut held) = self.state.held_notes.lock() {
+            held.clear();
+        }
+        if let Ok(mut active) = self.state.active_usages.lock() {
+            active.clear();
+        }
+        if let Ok(mut notes) = self.state.active_notes.lock() {
+            notes.clear();
+        }
+
+        self.state.request_repaint();
     }
 
     fn send_raw(&self, bytes: &[u8]) {

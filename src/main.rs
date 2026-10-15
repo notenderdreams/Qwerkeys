@@ -1,25 +1,31 @@
 mod iokit;
 mod mapping;
 mod midi;
+mod scale;
+mod state;
+mod ui;
 
 use std::env;
 use std::error::Error;
 use std::ffi::{c_int, c_void};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::thread;
 
 use iokit::{try_seize_device, unseize_device, HidSystem};
 use midi::MidiEngine;
+use state::AppState;
+use ui::NekotoApp;
 
 static SEIZED_DEVICE: AtomicUsize = AtomicUsize::new(0);
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
 
-    let hid = HidSystem::new().map_err(|e| Box::<dyn Error>::from(e))?;
+    let hid = HidSystem::new().map_err(Box::<dyn Error>::from)?;
     let keyboards = hid.enumerate_keyboards();
 
-    // List mode
+    // CLI List mode
     if args.iter().any(|a| a == "--list" || a == "-l") {
         println!("Connected Keyboards:");
         for k in &keyboards {
@@ -30,6 +36,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             );
         }
         return Ok(());
+    }
+
+    let state = Arc::new(AppState::new());
+    if let Ok(mut devs) = state.devices.lock() {
+        *devs = keyboards.clone();
     }
 
     // Target selection: user argument or first external keyboard
@@ -47,16 +58,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         keyboards.iter().find(|k| !k.is_internal).or_else(|| keyboards.first())
     };
 
-    let Some(device) = chosen else {
-        eprintln!("No keyboard found.");
-        return Ok(());
-    };
+    let target_ptr = chosen.map(|d| d.device_ptr).unwrap_or(0);
+    let is_external = chosen.map(|d| !d.is_internal).unwrap_or(false);
 
-    let is_external = !device.is_internal;
-    let target_ptr = device.device_ptr;
-
-    // Attempt hardware seize on external keyboards
-    let is_seized = if is_external {
+    let is_seized = if is_external && target_ptr != 0 {
         try_seize_device(target_ptr)
     } else {
         false
@@ -64,38 +69,72 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if is_seized {
         SEIZED_DEVICE.store(target_ptr, Ordering::SeqCst);
+        state.is_seized.store(true, Ordering::SeqCst);
     }
+    state.set_selected_device(target_ptr);
+    iokit::set_suppression_enabled(is_external);
+
     setup_signal_handler();
 
     let port_name = "nekoto-input";
-    let midi_engine = Arc::new(MidiEngine::new(port_name)?);
+    let midi_engine = Arc::new(MidiEngine::new(port_name, Arc::clone(&state))?);
 
-    // Clean, readable startup output
-    println!("nekoto • dedicated midi keyboard");
-    println!("  Device:  {} ({})", device.name, device.transport);
-    println!("  Port:    {}", port_name);
-    println!(
-        "  Mode:    {}",
-        if is_external {
-            if is_seized {
-                "Dedicated (hardware seized)"
+    // Clean startup banner
+    println!("nekoto • in-scale dedicated midi keyboard");
+    if let Some(dev) = chosen {
+        println!("  Device:  {} ({})", dev.name, dev.transport);
+        println!(
+            "  Mode:    {}",
+            if is_external {
+                if is_seized {
+                    "Dedicated (hardware seized)"
+                } else {
+                    "Dedicated (keystrokes suppressed)"
+                }
             } else {
-                "Dedicated (keystrokes suppressed)"
+                "Shared (internal keyboard)"
             }
-        } else {
-            "Shared (internal keyboard)"
-        }
-    );
-    println!("Ready. Press Ctrl+C to stop.\n");
+        );
+    }
+    println!("  Port:    {}", port_name);
+    println!("Starting GUI window...\n");
 
-    let engine = Arc::clone(&midi_engine);
-    hid.start_listener(target_ptr, is_external, is_seized, move |usage, is_down| {
-        if is_down {
-            engine.handle_key_down(usage);
-        } else {
-            engine.handle_key_up(usage);
-        }
+    // Start background IOHID event listener thread
+    let listener_engine = Arc::clone(&midi_engine);
+    thread::spawn(move || {
+        hid.start_listener(target_ptr, move |usage, is_down| {
+            if is_down {
+                listener_engine.handle_key_down(usage);
+            } else {
+                listener_engine.handle_key_up(usage);
+            }
+        });
     });
+
+    // Run native macOS GUI on main thread
+    let native_options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1040.0, 530.0])
+            .with_min_inner_size([920.0, 480.0])
+            .with_title("Nekoto • Dedicated MIDI Keyboard"),
+        ..Default::default()
+    };
+
+    let app_state = Arc::clone(&state);
+    let app_midi = Arc::clone(&midi_engine);
+
+    eframe::run_native(
+        "Nekoto",
+        native_options,
+        Box::new(move |cc| Ok(Box::new(NekotoApp::new(cc, app_state, app_midi)))),
+    )?;
+
+    // Clean up upon GUI close
+    let dev = SEIZED_DEVICE.load(Ordering::SeqCst);
+    if dev != 0 {
+        unseize_device(dev);
+    }
+    iokit::stop_hid_system();
 
     Ok(())
 }
@@ -109,6 +148,7 @@ extern "C" fn sigint_handler(_: c_int) {
     if dev != 0 {
         unseize_device(dev);
     }
+    iokit::stop_hid_system();
     println!("\n[nekoto] Stopped.");
     std::process::exit(0);
 }
@@ -124,5 +164,6 @@ fn setup_signal_handler() {
         if dev != 0 {
             unseize_device(dev);
         }
+        iokit::stop_hid_system();
     }));
 }
