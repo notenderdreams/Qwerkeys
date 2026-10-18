@@ -14,7 +14,7 @@ use std::thread;
 use iokit::{DeviceTargetMode, HidSystem};
 use midi::MidiEngine;
 use state::AppState;
-use ui::NekotoApp;
+use ui::QwerkeysApp;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
@@ -79,12 +79,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     iokit::set_suppression_enabled(is_suppressed);
     setup_signal_handler();
 
-    let port_name = "nekoto-input";
+    let port_name = "qwerkeys-input";
     let midi_engine = Arc::new(MidiEngine::new(port_name, Arc::clone(&state))?);
     midi_engine.panic_all_notes();
 
     // Clean startup banner
-    println!("nekoto • in-scale dedicated midi keyboard");
+    println!("qwerkeys • in-scale dedicated midi keyboard");
     println!("  Target:  {display_desc}");
     println!(
         "  Mode:    {}",
@@ -114,7 +114,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1040.0, 500.0])
             .with_min_inner_size([920.0, 465.0])
-            .with_title("Nekoto • Dedicated MIDI Keyboard"),
+            .with_title("Qwerkeys • Dedicated MIDI Keyboard"),
         ..Default::default()
     };
 
@@ -122,9 +122,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let app_midi = Arc::clone(&midi_engine);
 
     eframe::run_native(
-        "Nekoto",
+        "Qwerkeys",
         native_options,
-        Box::new(move |cc| Ok(Box::new(NekotoApp::new(cc, app_state, app_midi)))),
+        Box::new(move |cc| Ok(Box::new(QwerkeysApp::new(cc, app_state, app_midi)))),
     )?;
 
     // Clean up upon GUI close
@@ -139,7 +139,7 @@ unsafe extern "C" {
 
 extern "C" fn sigint_handler(_: c_int) {
     iokit::stop_hid_system();
-    println!("\n[nekoto] Stopped.");
+    println!("\n[qwerkeys] Stopped.");
     std::process::exit(0);
 }
 

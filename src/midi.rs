@@ -15,7 +15,7 @@ pub struct MidiEngine {
 
 impl MidiEngine {
     pub fn new(port_name: &str, state: Arc<AppState>) -> Result<Self, Box<dyn Error>> {
-        let midi_out = MidiOutput::new("nekoto-client")?;
+        let midi_out = MidiOutput::new("qwerkeys-client")?;
         let conn = midi_out.create_virtual(port_name)?;
 
         Ok(Self {
@@ -184,7 +184,7 @@ impl MidiEngine {
         if let Ok(mut conn) = self.conn.lock()
             && let Err(e) = conn.send(bytes)
         {
-            eprintln!("[nekoto] MIDI send error: {e}");
+            eprintln!("[qwerkeys] MIDI send error: {e}");
         }
     }
 

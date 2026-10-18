@@ -18,14 +18,14 @@ enum QwertyKeyDef {
     SplitGap(f32),
 }
 
-pub struct NekotoApp {
+pub struct QwerkeysApp {
     state: Arc<AppState>,
     midi: Arc<MidiEngine>,
     clicked_usages: Vec<u32>,
     clicked_piano_notes: Vec<u8>,
 }
 
-impl NekotoApp {
+impl QwerkeysApp {
     pub fn new(cc: &eframe::CreationContext<'_>, state: Arc<AppState>, midi: Arc<MidiEngine>) -> Self {
         state.set_egui_ctx(cc.egui_ctx.clone());
 
@@ -46,7 +46,7 @@ impl NekotoApp {
     fn render_header(&self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.label(
-                RichText::new("NEKOTO")
+                RichText::new("QWERKEYS")
                     .font(FontId::proportional(19.0))
                     .strong()
                     .color(Color32::from_rgb(240, 240, 240)),
@@ -54,7 +54,7 @@ impl NekotoApp {
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.label(
-                    RichText::new("Port: nekoto-input")
+                    RichText::new("Port: qwerkeys-input")
                         .color(Color32::from_rgb(130, 130, 130))
                         .font(FontId::proportional(11.5)),
                 );
@@ -764,7 +764,7 @@ impl NekotoApp {
     }
 }
 
-impl eframe::App for NekotoApp {
+impl eframe::App for QwerkeysApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.state.set_egui_ctx(ctx);
