@@ -26,6 +26,7 @@ pub type IOReturn = c_int;
 pub type IOOptionBits = u32;
 
 pub const K_IOHID_OPTIONS_TYPE_NONE: IOOptionBits = 0;
+#[allow(dead_code)]
 pub const K_IOHID_OPTIONS_TYPE_SEIZE_DEVICE: IOOptionBits = 1;
 pub const K_IO_RETURN_SUCCESS: IOReturn = 0;
 
@@ -58,7 +59,9 @@ unsafe extern "C" {
         context: *mut c_void,
     );
 
+    #[allow(dead_code)]
     pub fn IOHIDDeviceOpen(device: IOHIDDeviceRef, options: IOOptionBits) -> IOReturn;
+    #[allow(dead_code)]
     pub fn IOHIDDeviceClose(device: IOHIDDeviceRef, options: IOOptionBits) -> IOReturn;
     pub fn IOHIDDeviceGetProperty(device: IOHIDDeviceRef, key: CFStringRef) -> *const c_void;
 

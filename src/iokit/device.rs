@@ -18,6 +18,43 @@ pub struct KeyboardDevice {
     pub device_ptr: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SenderDeviceInfo {
+    pub is_internal: bool,
+    pub name: String,
+    pub vendor_id: Option<u32>,
+    pub product_id: Option<u32>,
+}
+
+pub fn inspect_device(dev: IOHIDDeviceRef) -> SenderDeviceInfo {
+    let name = get_string_property(dev, "Product");
+    let mfg = get_string_property(dev, "Manufacturer");
+    let transport = get_string_property(dev, "Transport");
+    let vid = get_u32_property(dev, "VendorID");
+    let pid = get_u32_property(dev, "ProductID");
+
+    let display_name = if !name.is_empty() {
+        name
+    } else if !mfg.is_empty() {
+        format!("{mfg} Keyboard")
+    } else {
+        "Unnamed Keyboard".to_string()
+    };
+
+    let is_internal = display_name.to_lowercase().contains("internal")
+        || display_name.to_lowercase().contains("apple internal")
+        || transport.eq_ignore_ascii_case("fifo")
+        || transport.eq_ignore_ascii_case("spu")
+        || transport.eq_ignore_ascii_case("spi");
+
+    SenderDeviceInfo {
+        is_internal,
+        name: display_name,
+        vendor_id: vid,
+        product_id: pid,
+    }
+}
+
 pub fn enumerate_keyboards(mgr: IOHIDManagerRef) -> Vec<KeyboardDevice> {
     let mut result = Vec::new();
     if mgr.is_null() {
@@ -104,28 +141,9 @@ pub fn enumerate_keyboards(mgr: IOHIDManagerRef) -> Vec<KeyboardDevice> {
     result
 }
 
-pub fn try_seize_device(device_ptr: usize) -> bool {
-    if device_ptr == 0 {
-        return false;
-    }
-    unsafe {
-        let dev = device_ptr as IOHIDDeviceRef;
-        let res = IOHIDDeviceOpen(dev, K_IOHID_OPTIONS_TYPE_SEIZE_DEVICE);
-        res == K_IO_RETURN_SUCCESS
-    }
-}
 
-pub fn unseize_device(device_ptr: usize) {
-    if device_ptr == 0 {
-        return;
-    }
-    unsafe {
-        let dev = device_ptr as IOHIDDeviceRef;
-        let _ = IOHIDDeviceClose(dev, K_IOHID_OPTIONS_TYPE_SEIZE_DEVICE);
-    }
-}
 
-fn get_string_property(device: IOHIDDeviceRef, key_name: &str) -> String {
+pub fn get_string_property(device: IOHIDDeviceRef, key_name: &str) -> String {
     let cf_key = CFString::new(key_name);
     unsafe {
         let prop = IOHIDDeviceGetProperty(device, cf_key.as_concrete_TypeRef());
@@ -137,7 +155,7 @@ fn get_string_property(device: IOHIDDeviceRef, key_name: &str) -> String {
     }
 }
 
-fn get_u32_property(device: IOHIDDeviceRef, key_name: &str) -> Option<u32> {
+pub fn get_u32_property(device: IOHIDDeviceRef, key_name: &str) -> Option<u32> {
     let cf_key = CFString::new(key_name);
     unsafe {
         let prop = IOHIDDeviceGetProperty(device, cf_key.as_concrete_TypeRef());

@@ -1,7 +1,7 @@
 pub mod device;
 pub mod ffi;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -20,18 +20,50 @@ use crate::mapping::hid_usage_to_mac_keycode;
 
 type KeyHandler = Box<dyn Fn(u32, bool) + Send + Sync + 'static>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceTargetMode {
+    Omni,
+    ExternalOnly,
+    Specific {
+        name: String,
+        vid: Option<u32>,
+        pid: Option<u32>,
+    },
+}
+
+type SenderCache = HashMap<usize, SenderDeviceInfo>;
+
 static GLOBAL_KEY_HANDLER: OnceLock<KeyHandler> = OnceLock::new();
-static TARGET_DEVICE_PTR: AtomicUsize = AtomicUsize::new(0);
+static GLOBAL_MGR: AtomicUsize = AtomicUsize::new(0);
+static TARGET_MODE: Mutex<DeviceTargetMode> = Mutex::new(DeviceTargetMode::Omni);
+static SENDER_CACHE: Mutex<Option<SenderCache>> = Mutex::new(None);
 static SUPPRESSION_ENABLED: AtomicBool = AtomicBool::new(true);
 static SWALLOW_KEYCODES: OnceLock<Mutex<HashSet<i64>>> = OnceLock::new();
 static RUN_LOOP_REF: AtomicUsize = AtomicUsize::new(0);
 
-pub fn set_target_device_ptr(ptr: usize) {
-    TARGET_DEVICE_PTR.store(ptr, Ordering::SeqCst);
+pub fn set_target_mode(mode: DeviceTargetMode) {
+    if let Ok(mut lock) = TARGET_MODE.lock() {
+        *lock = mode;
+    }
+    if let Ok(mut cache) = SENDER_CACHE.lock() {
+        *cache = Some(HashMap::new());
+    }
     if let Some(swallow) = SWALLOW_KEYCODES.get()
         && let Ok(mut set) = swallow.lock()
     {
         set.clear();
+    }
+}
+
+#[allow(dead_code)]
+pub fn get_target_mode() -> DeviceTargetMode {
+    TARGET_MODE.lock().map(|m| m.clone()).unwrap_or(DeviceTargetMode::Omni)
+}
+
+#[allow(dead_code)]
+pub fn set_target_device_ptr(ptr: usize) {
+    if ptr == 0 {
+        set_target_mode(DeviceTargetMode::Omni);
     }
 }
 
@@ -42,6 +74,15 @@ pub fn set_suppression_enabled(enabled: bool) {
         && let Ok(mut set) = swallow.lock()
     {
         set.clear();
+    }
+}
+
+pub fn refresh_keyboards() -> Vec<KeyboardDevice> {
+    let mgr_ptr = GLOBAL_MGR.load(Ordering::SeqCst);
+    if mgr_ptr != 0 {
+        enumerate_keyboards(mgr_ptr as IOHIDManagerRef)
+    } else {
+        Vec::new()
     }
 }
 
@@ -67,6 +108,7 @@ impl HidSystem {
         if mgr.is_null() {
             return Err("Failed to create IOHIDManager");
         }
+        GLOBAL_MGR.store(mgr as usize, Ordering::SeqCst);
         Ok(Self { mgr })
     }
 
@@ -74,11 +116,11 @@ impl HidSystem {
         device::enumerate_keyboards(self.mgr)
     }
 
-    pub fn start_listener<F>(&self, initial_target_ptr: usize, on_key: F)
+    pub fn start_listener<F>(&self, initial_mode: DeviceTargetMode, on_key: F)
     where
         F: Fn(u32, bool) + Send + Sync + 'static,
     {
-        TARGET_DEVICE_PTR.store(initial_target_ptr, Ordering::SeqCst);
+        set_target_mode(initial_mode);
         GLOBAL_KEY_HANDLER.set(Box::new(on_key)).ok();
         SWALLOW_KEYCODES.set(Mutex::new(HashSet::new())).ok();
 
@@ -152,8 +194,51 @@ extern "C" fn hid_input_callback(
         return;
     }
 
-    let target = TARGET_DEVICE_PTR.load(Ordering::SeqCst);
-    if target != 0 && (sender as usize) != target {
+    let sender_ptr = sender as usize;
+    let target_mode = if let Ok(lock) = TARGET_MODE.lock() {
+        lock.clone()
+    } else {
+        DeviceTargetMode::Omni
+    };
+
+    let is_match = match &target_mode {
+        DeviceTargetMode::Omni => true,
+        DeviceTargetMode::ExternalOnly => {
+            let is_internal = {
+                let mut cache_lock = SENDER_CACHE.lock().unwrap();
+                let cache = cache_lock.get_or_insert_with(HashMap::new);
+                if let Some(info) = cache.get(&sender_ptr) {
+                    info.is_internal
+                } else {
+                    let info = inspect_device(sender as IOHIDDeviceRef);
+                    let res = info.is_internal;
+                    cache.insert(sender_ptr, info);
+                    res
+                }
+            };
+            !is_internal
+        }
+        DeviceTargetMode::Specific { name, vid, pid } => {
+            let info = {
+                let mut cache_lock = SENDER_CACHE.lock().unwrap();
+                let cache = cache_lock.get_or_insert_with(HashMap::new);
+                if let Some(info) = cache.get(&sender_ptr) {
+                    info.clone()
+                } else {
+                    let info = inspect_device(sender as IOHIDDeviceRef);
+                    cache.insert(sender_ptr, info.clone());
+                    info
+                }
+            };
+
+            let vid_match = vid.is_some() && *vid == info.vendor_id && *pid == info.product_id;
+            let name_match = !name.is_empty()
+                && (info.name.eq_ignore_ascii_case(name) || info.name.to_lowercase().contains(&name.to_lowercase()));
+            vid_match || name_match
+        }
+    };
+
+    if !is_match {
         return;
     }
 
