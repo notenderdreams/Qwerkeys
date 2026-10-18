@@ -5,7 +5,7 @@ use egui::{
     RichText, Sense, Stroke, Ui,
 };
 
-use crate::iokit::{self, try_seize_device, unseize_device, KeyboardDevice};
+use crate::iokit::{self, DeviceTargetMode, KeyboardDevice};
 use crate::mapping::{calculate_key_note, find_key_by_label, KeyMappingDef};
 use crate::midi::MidiEngine;
 use crate::scale::{format_midi_note, RootNote, ScaleType};
@@ -51,28 +51,11 @@ impl NekotoApp {
                     .strong()
                     .color(Color32::from_rgb(240, 240, 240)),
             );
-            ui.label(
-                RichText::new("•  Dedicated In-Scale Keyboard")
-                    .font(FontId::proportional(12.5))
-                    .color(Color32::from_rgb(130, 130, 130)),
-            );
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let is_seized = self.state.is_seized.load(Ordering::SeqCst);
-                let mode_badge = if is_seized {
-                    RichText::new("[DEDICATED • SEIZED]")
-                        .color(Color32::from_rgb(220, 220, 220))
-                        .strong()
-                } else {
-                    RichText::new("[DEDICATED • SUPPRESSED]")
-                        .color(Color32::from_rgb(160, 160, 160))
-                        .strong()
-                };
-                ui.label(mode_badge);
-
                 ui.label(
-                    RichText::new("Port: nekoto-input  |")
-                        .color(Color32::from_rgb(100, 100, 100))
+                    RichText::new("Port: nekoto-input")
+                        .color(Color32::from_rgb(130, 130, 130))
                         .font(FontId::proportional(11.5)),
                 );
             });
@@ -81,25 +64,40 @@ impl NekotoApp {
 
     fn render_controls(&self, ui: &mut Ui) {
         Frame::NONE
-            .fill(Color32::from_rgb(28, 28, 28))
-            .stroke(Stroke::new(1.0, Color32::from_rgb(44, 44, 44)))
+            .fill(Color32::from_rgb(26, 26, 26))
+            .stroke(Stroke::new(1.0, Color32::from_rgb(40, 40, 40)))
             .corner_radius(CornerRadius::same(6))
-            .inner_margin(Margin::same(10))
+            .inner_margin(Margin::symmetric(10, 8))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Device:").strong().color(Color32::from_rgb(200, 200, 200)));
                     let devices = self.state.devices.lock().unwrap().clone();
                     let current_ptr = self.state.selected_device_ptr.load(Ordering::SeqCst);
-                    let current_name = devices
-                        .iter()
-                        .find(|d| d.device_ptr == current_ptr)
-                        .map(|d| format!("{} ({})", d.name, d.transport))
-                        .unwrap_or_else(|| "Select Keyboard...".to_string());
+                    let current_name = if current_ptr == 0 {
+                        "All Keyboards (Omni)".to_string()
+                    } else if current_ptr == usize::MAX {
+                        "All External Keyboards".to_string()
+                    } else {
+                        devices
+                            .iter()
+                            .find(|d| d.device_ptr == current_ptr)
+                            .map(|d| format!("{} ({})", d.name, d.transport))
+                            .unwrap_or_else(|| "All Keyboards (Omni)".to_string())
+                    };
 
                     egui::ComboBox::from_id_salt("keyboard_select")
-                        .width(230.0)
+                        .width(220.0)
                         .selected_text(RichText::new(&current_name).color(Color32::WHITE))
                         .show_ui(ui, |ui| {
+                            let is_all = current_ptr == 0;
+                            if ui.selectable_label(is_all, "[*] All Keyboards (Omni)").clicked() {
+                                self.select_all_keyboards();
+                            }
+                            let is_ext_only = current_ptr == usize::MAX;
+                            if ui.selectable_label(is_ext_only, "[+] All External Keyboards").clicked() {
+                                self.select_external_keyboards();
+                            }
+                            ui.separator();
                             for dev in &devices {
                                 let label = format!(
                                     "[{}] {} ({}) {}",
@@ -114,6 +112,13 @@ impl NekotoApp {
                                 }
                             }
                         });
+
+                    if ui.button("⟳").on_hover_text("Scan for newly connected keyboards").clicked() {
+                        let fresh = iokit::refresh_keyboards();
+                        if let Ok(mut devs) = self.state.devices.lock() {
+                            *devs = fresh;
+                        }
+                    }
 
                     ui.separator();
 
@@ -153,12 +158,6 @@ impl NekotoApp {
                                 }
                             }
                         });
-
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if ui.button(RichText::new("All Notes Off").color(Color32::from_rgb(210, 210, 210))).clicked() {
-                            self.midi.panic_all_notes();
-                        }
-                    });
                 });
 
                 ui.add_space(5.0);
@@ -198,30 +197,6 @@ impl NekotoApp {
                     if ui.add(slider).changed() {
                         self.state.velocity.store(vel, Ordering::SeqCst);
                     }
-
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.label(RichText::new("Presets:").color(Color32::from_rgb(110, 110, 110)));
-                        if ui.small_button("Blues A").clicked() {
-                            self.state.set_root(RootNote::A);
-                            self.state.set_scale(ScaleType::Blues);
-                        }
-                        if ui.small_button("Pent E").clicked() {
-                            self.state.set_root(RootNote::E);
-                            self.state.set_scale(ScaleType::MinorPentatonic);
-                        }
-                        if ui.small_button("Dorian D").clicked() {
-                            self.state.set_root(RootNote::D);
-                            self.state.set_scale(ScaleType::Dorian);
-                        }
-                        if ui.small_button("Major C").clicked() {
-                            self.state.set_root(RootNote::C);
-                            self.state.set_scale(ScaleType::Major);
-                        }
-                        if ui.small_button("Minor C").clicked() {
-                            self.state.set_root(RootNote::C);
-                            self.state.set_scale(ScaleType::NaturalMinor);
-                        }
-                    });
                 });
             });
     }
@@ -240,14 +215,14 @@ impl NekotoApp {
 
         Frame::NONE
             .fill(Color32::from_rgb(24, 24, 24))
-            .stroke(Stroke::new(1.0, Color32::from_rgb(42, 42, 42)))
+            .stroke(Stroke::new(1.0, Color32::from_rgb(40, 40, 40)))
             .corner_radius(CornerRadius::same(6))
-            .inner_margin(Margin::symmetric(8, 7))
+            .inner_margin(Margin::symmetric(10, 8))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(
                         RichText::new("PIANO KEYBOARD")
-                            .font(FontId::proportional(11.5))
+                            .font(FontId::proportional(11.0))
                             .strong()
                             .color(Color32::from_rgb(180, 180, 180)),
                     );
@@ -257,7 +232,7 @@ impl NekotoApp {
                             min_oct,
                             min_oct + num_octaves as i8
                         ))
-                        .font(FontId::proportional(11.0))
+                        .font(FontId::proportional(10.5))
                         .color(Color32::from_rgb(110, 110, 110)),
                     );
 
@@ -268,7 +243,7 @@ impl NekotoApp {
                                 RichText::new(format!("● {active_count} ACTIVE"))
                                     .color(Color32::WHITE)
                                     .strong()
-                                    .font(FontId::proportional(11.0)),
+                                    .font(FontId::proportional(10.5)),
                             );
                         }
                     });
@@ -277,12 +252,12 @@ impl NekotoApp {
                 ui.add_space(4.0);
 
                 let available_w = ui.available_width();
-                let wk_h = 72.0;
-                let bk_h = 44.0;
-                let wk_w = (available_w / (total_white_keys as f32)).floor();
+                let wk_h = 68.0;
+                let bk_h = 42.0;
+                let wk_w = available_w / (total_white_keys as f32);
                 let bk_w = (wk_w * 0.62).round();
 
-                let (rect, response) = ui.allocate_exact_size(vec2(wk_w * total_white_keys as f32, wk_h), Sense::click_and_drag());
+                let (rect, response) = ui.allocate_exact_size(vec2(available_w, wk_h), Sense::click_and_drag());
                 let painter = ui.painter();
 
                 let pointer_pos = ui.input(|i| i.pointer.hover_pos());
@@ -299,9 +274,11 @@ impl NekotoApp {
                     let oct = min_oct + oct_idx as i8;
                     let note = ((oct + 1) as i16 * 12 + white_semitones[step_idx] as i16).clamp(0, 127) as u8;
 
-                    let key_rect = Rect::from_min_size(
-                        Pos2::new(rect.min.x + k as f32 * wk_w, rect.min.y),
-                        vec2(wk_w, wk_h),
+                    let x0 = rect.min.x + (k as f32) * wk_w;
+                    let x1 = if k + 1 == total_white_keys { rect.max.x } else { rect.min.x + ((k + 1) as f32) * wk_w };
+                    let key_rect = Rect::from_min_max(
+                        Pos2::new(x0, rect.min.y),
+                        Pos2::new(x1, rect.min.y + wk_h),
                     );
 
                     if let Some(pos) = pointer_pos
@@ -315,7 +292,7 @@ impl NekotoApp {
                     let is_root = scale.is_root(root, note);
 
                     let fill = if is_active {
-                        Color32::from_rgb(255, 255, 255) // Triggered = bright pure white
+                        Color32::from_rgb(255, 255, 255)
                     } else if in_scale {
                         Color32::from_rgb(210, 210, 210)
                     } else {
@@ -422,7 +399,7 @@ impl NekotoApp {
             });
     }
 
-    /// Draws the realistic physical mechanical QWERTY keyboard chassis & staggered rows directly BELOW the piano
+    /// Draws the physical mechanical QWERTY keyboard with balanced 20 keys per hand and exact QWERTY separation
     fn render_qwerty_keyboard(&mut self, ui: &mut Ui) {
         let root = self.state.get_root();
         let scale = self.state.get_scale();
@@ -431,81 +408,55 @@ impl NekotoApp {
 
         Frame::NONE
             .fill(Color32::from_rgb(25, 25, 25))
-            .stroke(Stroke::new(1.2, Color32::from_rgb(44, 44, 44)))
-            .corner_radius(CornerRadius::same(8))
-            .inner_margin(Margin::same(12))
+            .stroke(Stroke::new(1.0, Color32::from_rgb(40, 40, 40)))
+            .corner_radius(CornerRadius::same(6))
+            .inner_margin(Margin::symmetric(10, 8))
             .show(ui, |ui| {
-                // Header with Left Hand vs Right Hand guides
                 ui.horizontal(|ui| {
                     ui.label(
                         RichText::new("QWERTY KEYBOARD")
-                            .font(FontId::proportional(11.5))
+                            .font(FontId::proportional(11.0))
                             .strong()
                             .color(Color32::from_rgb(180, 180, 180)),
                     );
-
-                    let left_min = scale.get_midi_note(root, left_oct, 0);
-                    let left_max = scale.get_midi_note(root, left_oct, 21);
-                    let right_min = scale.get_midi_note(root, right_oct, 0);
-                    let right_max = scale.get_midi_note(root, right_oct, 22);
-
-                    ui.label(
-                        RichText::new(format!(
-                            "[Left Hand: {}–{} (22 keys)]    [Right Hand: {}–{} (23 keys)]",
-                            format_midi_note(left_min),
-                            format_midi_note(left_max),
-                            format_midi_note(right_min),
-                            format_midi_note(right_max)
-                        ))
-                        .font(FontId::proportional(11.0))
-                        .color(Color32::from_rgb(120, 120, 120)),
-                    );
-
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.label(
-                            RichText::new("Split Ergonomics: Bottom-to-Top Pitch Ascending")
-                                .font(FontId::proportional(10.5))
-                                .color(Color32::from_rgb(100, 100, 100)),
-                        );
-                    });
                 });
 
-                ui.add_space(8.0);
+                ui.add_space(4.0);
 
-                // Define the 5 rows of the physical mechanical keyboard (each exactly 15.0u total width)
+                // 5 rows: 15.0u width per row, 5 playable keys per hand, 1.0u gap down 5|6, T|Y, G|H, B|N
                 use QwertyKeyDef::*;
                 let rows: [&[QwertyKeyDef]; 5] = [
-                    // Row 0: Number Row (6 on left, 6 on right, including - and =)
+                    // Row 0: Number Row (5 on left, 5 on right)
                     &[
                         Modifier("~", 1.0),
-                        Playable("1"), Playable("2"), Playable("3"), Playable("4"), Playable("5"), Playable("6"),
-                        SplitGap(0.5),
-                        Playable("7"), Playable("8"), Playable("9"), Playable("0"), Playable("-"), Playable("="),
-                        Modifier("Delete", 1.5),
+                        Playable("1"), Playable("2"), Playable("3"), Playable("4"), Playable("5"),
+                        SplitGap(1.0),
+                        Playable("6"), Playable("7"), Playable("8"), Playable("9"), Playable("0"),
+                        Modifier("-", 1.0), Modifier("=", 1.0), Modifier("Delete", 1.0),
                     ],
-                    // Row 1: Top Row (6 on left, 6 on right, including [ and ])
+                    // Row 1: Top Row (5 on left, 5 on right)
                     &[
                         Modifier("Tab", 1.5),
-                        Playable("Q"), Playable("W"), Playable("E"), Playable("R"), Playable("T"), Playable("Y"),
-                        SplitGap(0.5),
-                        Playable("U"), Playable("I"), Playable("O"), Playable("P"), Playable("["), Playable("]"),
-                        Modifier("\\", 1.0),
+                        Playable("Q"), Playable("W"), Playable("E"), Playable("R"), Playable("T"),
+                        SplitGap(1.0),
+                        Playable("Y"), Playable("U"), Playable("I"), Playable("O"), Playable("P"),
+                        Modifier("[", 1.0), Modifier("]", 1.0), Modifier("\\", 0.5),
                     ],
-                    // Row 2: Home Row (5 on left, 6 on right, including ')
+                    // Row 2: Home Row (5 on left, 5 on right)
                     &[
                         Modifier("Caps", 1.75),
                         Playable("A"), Playable("S"), Playable("D"), Playable("F"), Playable("G"),
-                        SplitGap(0.5),
-                        Playable("H"), Playable("J"), Playable("K"), Playable("L"), Playable(";"), Playable("'"),
-                        Modifier("Return", 1.75),
+                        SplitGap(1.0),
+                        Playable("H"), Playable("J"), Playable("K"), Playable("L"), Playable(";"),
+                        Modifier("'", 1.0), Modifier("Return", 1.25),
                     ],
-                    // Row 3: Bottom Row (5 on left, 5 on right, including ., ,, /)
+                    // Row 3: Bottom Row (5 on left, 5 on right)
                     &[
-                        Modifier("Shift", 2.25),
+                        Modifier("Shift", 2.0),
                         Playable("Z"), Playable("X"), Playable("C"), Playable("V"), Playable("B"),
-                        SplitGap(0.5),
+                        SplitGap(1.0),
                         Playable("N"), Playable("M"), Playable(","), Playable("."), Playable("/"),
-                        Modifier("Shift", 2.25),
+                        Modifier("Shift", 2.0),
                     ],
                     // Row 4: Spacebar Row (Sustain Pedal)
                     &[
@@ -517,8 +468,10 @@ impl NekotoApp {
 
                 let total_width = ui.available_width();
                 let key_spacing = 3.0;
-                let unit_w = (total_width / 15.0).floor();
-                let row_h = 43.0;
+                let unit_u = (total_width + key_spacing) / 15.0;
+                let row_h = 42.0;
+
+                ui.spacing_mut().item_spacing = vec2(key_spacing, key_spacing);
 
                 for row in rows {
                     ui.horizontal(|ui| {
@@ -527,32 +480,31 @@ impl NekotoApp {
                         for key_def in row {
                             match key_def {
                                 Playable(label) => {
-                                    let key_w = unit_w - key_spacing;
+                                    let key_w = 1.0 * unit_u - key_spacing;
                                     if let Some(key) = find_key_by_label(label) {
                                         self.render_playable_keycap(ui, key, key_w, row_h, root, scale, left_oct, right_oct);
                                     }
                                 }
                                 Modifier(label, units) => {
-                                    let key_w = units * unit_w - key_spacing;
+                                    let key_w = *units * unit_u - key_spacing;
                                     self.render_modifier_keycap(ui, label, key_w, row_h);
                                 }
                                 Spacebar(units) => {
-                                    let key_w = units * unit_w - key_spacing;
+                                    let key_w = *units * unit_u - key_spacing;
                                     self.render_spacebar_keycap(ui, key_w, row_h);
                                 }
                                 SplitGap(units) => {
-                                    let gap_w = units * unit_w;
+                                    let gap_w = *units * unit_u - key_spacing;
                                     let (rect, _) = ui.allocate_exact_size(vec2(gap_w, row_h), Sense::hover());
-                                    // Subtle central divider line
+                                    // Subtle central divider line marking the clean two-hand split
                                     ui.painter().line_segment(
                                         [rect.center_top(), rect.center_bottom()],
-                                        Stroke::new(1.0, Color32::from_rgb(48, 48, 48)),
+                                        Stroke::new(1.0, Color32::from_rgb(50, 50, 50)),
                                     );
                                 }
                             }
                         }
                     });
-                    ui.add_space(key_spacing);
                 }
             });
     }
@@ -576,12 +528,11 @@ impl NekotoApp {
 
         let is_triggered = self.state.is_key_active(key.usage);
 
-        // When triggered: Inverts to bright solid white/light gray with dark text
         let (fill, stroke, text_color, sub_color) = if is_triggered {
             (
-                Color32::from_rgb(250, 250, 250), // Triggered highlight
+                Color32::from_rgb(250, 250, 250),
                 Color32::from_rgb(255, 255, 255),
-                Color32::from_rgb(14, 14, 14),    // Dark text
+                Color32::from_rgb(14, 14, 14),
                 Color32::from_rgb(50, 50, 50),
             )
         } else if is_root {
@@ -602,7 +553,6 @@ impl NekotoApp {
 
         let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::click_and_drag());
 
-        // Mouse click audition support
         if response.is_pointer_button_down_on() {
             if !self.clicked_usages.contains(&key.usage) {
                 self.clicked_usages.push(key.usage);
@@ -615,7 +565,6 @@ impl NekotoApp {
 
         let painter = ui.painter();
 
-        // Keycap Surface with subtle mechanical bevel
         painter.rect(
             rect,
             CornerRadius::same(4),
@@ -624,7 +573,6 @@ impl NekotoApp {
             egui::StrokeKind::Inside,
         );
 
-        // Physical Key Letter (Top Left)
         painter.text(
             rect.min + vec2(5.0, 4.0),
             Align2::LEFT_TOP,
@@ -633,7 +581,6 @@ impl NekotoApp {
             if is_triggered { Color32::from_rgb(60, 60, 60) } else { Color32::from_rgb(120, 120, 120) },
         );
 
-        // MIDI Note Name (Center)
         painter.text(
             rect.center() + vec2(0.0, -1.0),
             Align2::CENTER_CENTER,
@@ -642,7 +589,6 @@ impl NekotoApp {
             text_color,
         );
 
-        // Scale Degree (Bottom Center)
         painter.text(
             rect.center() + vec2(0.0, 13.0),
             Align2::CENTER_CENTER,
@@ -744,35 +690,49 @@ impl NekotoApp {
     }
 
     fn switch_keyboard(&self, dev: &KeyboardDevice) {
-        let prev_ptr = self.state.selected_device_ptr.load(Ordering::SeqCst);
-        if prev_ptr != 0 && self.state.is_seized.load(Ordering::SeqCst) {
-            unseize_device(prev_ptr);
-            self.state.is_seized.store(false, Ordering::SeqCst);
-        }
-
         let is_external = !dev.is_internal;
-        let mut seized = false;
-        if is_external && dev.device_ptr != 0 {
-            seized = try_seize_device(dev.device_ptr);
-        }
-
-        self.state.is_seized.store(seized, Ordering::SeqCst);
         self.state.set_selected_device(dev.device_ptr);
 
-        iokit::set_target_device_ptr(dev.device_ptr);
+        iokit::set_target_mode(DeviceTargetMode::Specific {
+            name: dev.name.clone(),
+            vid: dev.vendor_id,
+            pid: dev.product_id,
+        });
         iokit::set_suppression_enabled(is_external);
 
         if let Ok(mut info) = self.state.last_event_info.lock() {
             *info = format!(
-                "Switched to {} ({})",
+                "Target: {} ({})",
                 dev.name,
-                if seized { "Seized" } else if is_external { "Suppressed" } else { "Shared" }
+                if is_external { "Suppressed" } else { "Shared" }
             );
         }
         println!(
-            "Switched keyboard to {} (ptr: {:#x}, seized: {})",
-            dev.name, dev.device_ptr, seized
+            "Target keyboard set to {} (transport: {}, suppressed: {})",
+            dev.name, dev.transport, is_external
         );
+    }
+
+    fn select_all_keyboards(&self) {
+        self.state.set_selected_device(0);
+        iokit::set_target_mode(DeviceTargetMode::Omni);
+        iokit::set_suppression_enabled(false);
+
+        if let Ok(mut info) = self.state.last_event_info.lock() {
+            *info = "Listening to All Keyboards (Omni)".to_string();
+        }
+        println!("Target keyboard set to All Keyboards (Omni)");
+    }
+
+    fn select_external_keyboards(&self) {
+        self.state.set_selected_device(usize::MAX);
+        iokit::set_target_mode(DeviceTargetMode::ExternalOnly);
+        iokit::set_suppression_enabled(true);
+
+        if let Ok(mut info) = self.state.last_event_info.lock() {
+            *info = "Listening to All External Keyboards".to_string();
+        }
+        println!("Target keyboard set to All External Keyboards");
     }
 }
 
@@ -781,17 +741,25 @@ impl eframe::App for NekotoApp {
         let ctx = ui.ctx().clone();
         self.state.set_egui_ctx(ctx);
 
-        egui::CentralPanel::default().show(ui, |ui| {
+        let panel_frame = Frame::NONE
+            .fill(Color32::from_rgb(18, 18, 18))
+            .inner_margin(Margin {
+                left: 10,
+                right: 10,
+                top: 8,
+                bottom: 12,
+            });
+
+        egui::CentralPanel::default().frame(panel_frame).show(ui, |ui| {
+            ui.spacing_mut().item_spacing = vec2(5.0, 5.0);
+
             self.render_header(ui);
-            ui.add_space(5.0);
             self.render_controls(ui);
-            ui.add_space(6.0);
             // 1. Draw the Piano (MIDI keyboard)
             self.render_piano(ui);
-            ui.add_space(6.0);
             // 2. Below the piano, draw the physical mechanical QWERTY keyboard
             self.render_qwerty_keyboard(ui);
-            ui.add_space(6.0);
+            ui.add_space(2.0);
             // 3. Bottom status readout
             self.render_bottom_bar(ui);
         });

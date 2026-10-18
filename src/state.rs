@@ -15,7 +15,6 @@ pub struct AppState {
 
     pub devices: Mutex<Vec<KeyboardDevice>>,
     pub selected_device_ptr: AtomicUsize,
-    pub is_seized: AtomicBool,
 
     pub active_usages: Mutex<HashSet<u32>>,
     pub active_notes: Mutex<HashSet<u8>>,
@@ -37,7 +36,6 @@ impl AppState {
 
             devices: Mutex::new(Vec::new()),
             selected_device_ptr: AtomicUsize::new(0),
-            is_seized: AtomicBool::new(false),
 
             active_usages: Mutex::new(HashSet::new()),
             active_notes: Mutex::new(HashSet::new()),
