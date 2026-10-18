@@ -25,6 +25,15 @@ impl MidiEngine {
     }
 
     pub fn handle_key_down(&self, usage: u32) {
+        // Panic shortcut: Escape key (0x29) clears all stuck notes
+        if usage == 0x29 {
+            self.panic_all_notes();
+            if let Ok(mut info) = self.state.last_event_info.lock() {
+                *info = "Panic: All Notes Off".to_string();
+            }
+            return;
+        }
+
         // Sustain Pedal (Spacebar)
         if usage == 0x2C {
             if !self.state.sustain_held.swap(true, Ordering::SeqCst) {
@@ -39,6 +48,13 @@ impl MidiEngine {
 
         // In-scale Key mapping
         if let Some(key) = find_key_by_usage(usage) {
+            // Ignore OS key repeats for keys already held down
+            if let Ok(held) = self.state.held_notes.lock()
+                && held.contains_key(&usage)
+            {
+                return;
+            }
+
             let root = self.state.get_root();
             let scale = self.state.get_scale();
             let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
@@ -127,9 +143,16 @@ impl MidiEngine {
     }
 
     pub fn panic_all_notes(&self) {
-        // Send All Notes Off & Reset Controllers
-        self.send_cc(123, 0);
-        self.send_cc(120, 0);
+        // Send All Notes Off, All Sound Off, and Sustain Off
+        self.send_cc(123, 0); // All Notes Off
+        self.send_cc(120, 0); // All Sound Off
+        self.send_cc(64, 0);  // Sustain Off
+        self.state.sustain_held.store(false, Ordering::SeqCst);
+
+        // Send explicit Note Off for all 128 MIDI notes
+        for note in 0..128 {
+            self.send_raw(&[0x80, note, 0]);
+        }
 
         if let Ok(mut held) = self.state.held_notes.lock() {
             held.clear();
@@ -145,8 +168,10 @@ impl MidiEngine {
     }
 
     fn send_raw(&self, bytes: &[u8]) {
-        if let Ok(mut conn) = self.conn.lock() {
-            let _ = conn.send(bytes);
+        if let Ok(mut conn) = self.conn.lock()
+            && let Err(e) = conn.send(bytes)
+        {
+            eprintln!("[nekoto] MIDI send error: {e}");
         }
     }
 
