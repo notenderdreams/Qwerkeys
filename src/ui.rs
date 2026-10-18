@@ -6,7 +6,7 @@ use egui::{
 };
 
 use crate::iokit::{self, DeviceTargetMode, KeyboardDevice};
-use crate::mapping::{calculate_key_note, find_key_by_label, KeyMappingDef};
+use crate::mapping::{find_key_by_label, KeyMappingDef, LayoutPreset};
 use crate::midi::MidiEngine;
 use crate::scale::{format_midi_note, RootNote, ScaleType};
 use crate::state::AppState;
@@ -189,7 +189,7 @@ impl NekotoApp {
                         self.state.right_base_octave.store(right_oct, Ordering::SeqCst);
                     }
 
-                    ui.add_space(12.0);
+                    ui.add_space(10.0);
 
                     ui.label(RichText::new("Velocity:").color(Color32::from_rgb(160, 160, 160)));
                     let mut vel = self.state.velocity.load(Ordering::SeqCst);
@@ -197,6 +197,27 @@ impl NekotoApp {
                     if ui.add(slider).changed() {
                         self.state.velocity.store(vel, Ordering::SeqCst);
                     }
+
+                    ui.separator();
+
+                    ui.label(RichText::new("Preset:").strong().color(Color32::from_rgb(200, 200, 200)));
+                    let current_preset = self.state.get_layout_preset();
+                    egui::ComboBox::from_id_salt("layout_preset_select")
+                        .width(180.0)
+                        .selected_text(RichText::new(current_preset.name()).strong().color(Color32::WHITE))
+                        .show_ui(ui, |ui| {
+                            for preset in LayoutPreset::ALL {
+                                if ui.selectable_label(preset == current_preset, preset.name()).clicked() {
+                                    self.state.set_layout_preset(preset);
+                                }
+                            }
+                        });
+
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if ui.button(RichText::new("Panic (Esc)").color(Color32::from_rgb(210, 210, 210))).clicked() {
+                            self.midi.panic_all_notes();
+                        }
+                    });
                 });
             });
     }
@@ -405,6 +426,7 @@ impl NekotoApp {
         let scale = self.state.get_scale();
         let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
         let right_oct = self.state.right_base_octave.load(Ordering::SeqCst);
+        let preset = self.state.get_layout_preset();
 
         Frame::NONE
             .fill(Color32::from_rgb(25, 25, 25))
@@ -418,6 +440,12 @@ impl NekotoApp {
                             .font(FontId::proportional(11.0))
                             .strong()
                             .color(Color32::from_rgb(180, 180, 180)),
+                    );
+
+                    ui.label(
+                        RichText::new(format!("•  Preset: {}", preset.name()))
+                            .font(FontId::proportional(10.5))
+                            .color(Color32::from_rgb(120, 120, 120)),
                     );
                 });
 
@@ -482,7 +510,7 @@ impl NekotoApp {
                                 Playable(label) => {
                                     let key_w = 1.0 * unit_u - key_spacing;
                                     if let Some(key) = find_key_by_label(label) {
-                                        self.render_playable_keycap(ui, key, key_w, row_h, root, scale, left_oct, right_oct);
+                                        self.render_playable_keycap(ui, key, key_w, row_h, root, scale, left_oct, right_oct, preset);
                                     }
                                 }
                                 Modifier(label, units) => {
@@ -520,11 +548,11 @@ impl NekotoApp {
         scale: ScaleType,
         left_oct: i8,
         right_oct: i8,
+        preset: LayoutPreset,
     ) {
-        let note = calculate_key_note(key, root, scale, left_oct, right_oct);
-        let note_str = format_midi_note(note);
-        let degree = scale.degree_label(key.degree_index);
-        let is_root = degree == "Root";
+        let (note_str, degree, is_root) = crate::mapping::get_key_display_info(
+            key, root, scale, left_oct, right_oct, preset,
+        );
 
         let is_triggered = self.state.is_key_active(key.usage);
 

@@ -3,11 +3,13 @@ use std::sync::atomic::{AtomicBool, AtomicI8, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use crate::iokit::KeyboardDevice;
+use crate::mapping::LayoutPreset;
 use crate::scale::{RootNote, ScaleType};
 
 pub struct AppState {
     pub root: Mutex<RootNote>,
     pub scale: Mutex<ScaleType>,
+    pub layout_preset: Mutex<LayoutPreset>,
     pub left_base_octave: AtomicI8,
     pub right_base_octave: AtomicI8,
     pub velocity: AtomicU8,
@@ -18,7 +20,7 @@ pub struct AppState {
 
     pub active_usages: Mutex<HashSet<u32>>,
     pub active_notes: Mutex<HashSet<u8>>,
-    pub held_notes: Mutex<HashMap<u32, u8>>,
+    pub held_notes: Mutex<HashMap<u32, Vec<u8>>>,
 
     pub last_event_info: Mutex<String>,
     pub egui_ctx: Mutex<Option<egui::Context>>,
@@ -29,6 +31,7 @@ impl AppState {
         Self {
             root: Mutex::new(RootNote::C),
             scale: Mutex::new(ScaleType::NaturalMinor),
+            layout_preset: Mutex::new(LayoutPreset::LinearSplit),
             left_base_octave: AtomicI8::new(2),
             right_base_octave: AtomicI8::new(4),
             velocity: AtomicU8::new(100),
@@ -75,6 +78,15 @@ impl AppState {
 
     pub fn set_scale(&self, scale: ScaleType) {
         *self.scale.lock().unwrap() = scale;
+        self.request_repaint();
+    }
+
+    pub fn get_layout_preset(&self) -> LayoutPreset {
+        *self.layout_preset.lock().unwrap()
+    }
+
+    pub fn set_layout_preset(&self, preset: LayoutPreset) {
+        *self.layout_preset.lock().unwrap() = preset;
         self.request_repaint();
     }
 

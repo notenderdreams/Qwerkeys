@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use midir::{os::unix::VirtualOutput, MidiOutput, MidiOutputConnection};
 
-use crate::mapping::{calculate_key_note, find_key_by_usage};
+use crate::mapping::{calculate_key_notes, find_key_by_usage};
 use crate::scale::format_midi_note;
 use crate::state::AppState;
 
@@ -59,29 +59,38 @@ impl MidiEngine {
             let scale = self.state.get_scale();
             let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
             let right_oct = self.state.right_base_octave.load(Ordering::SeqCst);
+            let preset = self.state.get_layout_preset();
 
-            let note = calculate_key_note(key, root, scale, left_oct, right_oct);
+            let notes = calculate_key_notes(key, root, scale, left_oct, right_oct, preset);
             let vel = self.state.velocity.load(Ordering::SeqCst);
 
             // Record active state
             if let Ok(mut held) = self.state.held_notes.lock() {
-                held.insert(usage, note);
+                held.insert(usage, notes.clone());
             }
             if let Ok(mut active) = self.state.active_usages.lock() {
                 active.insert(usage);
             }
-            if let Ok(mut notes) = self.state.active_notes.lock() {
-                notes.insert(note);
+            if let Ok(mut active_notes) = self.state.active_notes.lock() {
+                for &n in &notes {
+                    active_notes.insert(n);
+                }
             }
 
-            self.send_raw(&[0x90, note, vel]);
+            for &n in &notes {
+                self.send_raw(&[0x90, n, vel]);
+            }
 
-            let note_str = format_midi_note(note);
-            let degree = scale.degree_label(key.degree_index);
+            let note_str = notes
+                .iter()
+                .map(|&n| format_midi_note(n))
+                .collect::<Vec<_>>()
+                .join(", ");
+
             if let Ok(mut info) = self.state.last_event_info.lock() {
-                *info = format!("♪ [{}] {note_str} ({degree})", key.label);
+                *info = format!("♪ [{}] {note_str}", key.label);
             }
-            println!("  ♪ [{}] {note_str:<4} ({degree})", key.label);
+            println!("  ♪ [{}] {note_str:<8}", key.label);
 
             self.state.request_repaint();
         }
@@ -101,21 +110,25 @@ impl MidiEngine {
         }
 
         // Note release
-        let released_note = if let Ok(mut held) = self.state.held_notes.lock() {
+        let released_notes = if let Ok(mut held) = self.state.held_notes.lock() {
             held.remove(&usage)
         } else {
             None
         };
 
-        if let Some(note) = released_note {
+        if let Some(notes) = released_notes {
             if let Ok(mut active) = self.state.active_usages.lock() {
                 active.remove(&usage);
             }
-            if let Ok(mut notes) = self.state.active_notes.lock() {
-                notes.remove(&note);
+            if let Ok(mut active_notes) = self.state.active_notes.lock() {
+                for &n in &notes {
+                    active_notes.remove(&n);
+                }
             }
 
-            self.send_raw(&[0x80, note, 64]);
+            for &n in &notes {
+                self.send_raw(&[0x80, n, 64]);
+            }
             self.state.request_repaint();
         }
     }

@@ -1,4 +1,34 @@
-use crate::scale::{RootNote, ScaleType};
+use crate::scale::{format_midi_note, RootNote, ScaleType};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LayoutPreset {
+    #[default]
+    LinearSplit,
+    OctaveStacked,
+    IsomorphicFourths,
+    ChordBassMelody,
+    LinearContinuous,
+}
+
+impl LayoutPreset {
+    pub const ALL: [LayoutPreset; 5] = [
+        LayoutPreset::LinearSplit,
+        LayoutPreset::OctaveStacked,
+        LayoutPreset::IsomorphicFourths,
+        LayoutPreset::ChordBassMelody,
+        LayoutPreset::LinearContinuous,
+    ];
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            LayoutPreset::LinearSplit => "Linear Split (20+20)",
+            LayoutPreset::OctaveStacked => "Octave Stacked (Vertical)",
+            LayoutPreset::IsomorphicFourths => "Isomorphic Fourths (Guitar)",
+            LayoutPreset::ChordBassMelody => "Chords Left + Lead Right",
+            LayoutPreset::LinearContinuous => "Linear Continuous (40 Keys)",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HandSide {
@@ -110,6 +140,7 @@ pub fn hid_usage_to_mac_keycode(usage: u32) -> Option<i64> {
     }
 }
 
+#[allow(dead_code)]
 pub fn calculate_key_note(
     key: &KeyMappingDef,
     root: RootNote,
@@ -117,11 +148,181 @@ pub fn calculate_key_note(
     left_base_octave: i8,
     right_base_octave: i8,
 ) -> u8 {
-    let base_octave = match key.hand {
-        HandSide::Left => left_base_octave,
-        HandSide::Right => right_base_octave,
-    };
-    scale.get_midi_note(root, base_octave, key.degree_index)
+    calculate_key_notes(
+        key,
+        root,
+        scale,
+        left_base_octave,
+        right_base_octave,
+        LayoutPreset::LinearSplit,
+    )[0]
+}
+
+pub fn calculate_key_notes(
+    key: &KeyMappingDef,
+    root: RootNote,
+    scale: ScaleType,
+    left_base_octave: i8,
+    right_base_octave: i8,
+    preset: LayoutPreset,
+) -> Vec<u8> {
+    match preset {
+        LayoutPreset::LinearSplit => {
+            let base_octave = match key.hand {
+                HandSide::Left => left_base_octave,
+                HandSide::Right => right_base_octave,
+            };
+            vec![scale.get_midi_note(root, base_octave, key.degree_index)]
+        }
+        LayoutPreset::OctaveStacked => {
+            let global_col = if key.hand == HandSide::Left {
+                key.col
+            } else {
+                key.col + 5
+            };
+            let row_oct_offset = (3 - key.row as i8).max(0);
+            let oct = left_base_octave + row_oct_offset;
+            vec![scale.get_midi_note(root, oct, global_col)]
+        }
+        LayoutPreset::IsomorphicFourths => {
+            let row_deg = (3 - key.row) * 3;
+            let deg = row_deg + key.col;
+            let base_octave = match key.hand {
+                HandSide::Left => left_base_octave,
+                HandSide::Right => right_base_octave,
+            };
+            vec![scale.get_midi_note(root, base_octave, deg)]
+        }
+        LayoutPreset::ChordBassMelody => match key.hand {
+            HandSide::Left => match key.row {
+                3 => {
+                    let note = scale.get_midi_note(root, left_base_octave, key.col);
+                    vec![note]
+                }
+                2 => {
+                    let base_deg = key.col;
+                    let r = scale.get_midi_note(root, left_base_octave + 1, base_deg);
+                    let t = scale.get_midi_note(root, left_base_octave + 1, base_deg + 2);
+                    let f = scale.get_midi_note(root, left_base_octave + 1, base_deg + 4);
+                    vec![r, t, f]
+                }
+                1 => {
+                    let base_deg = key.col + 5;
+                    let r = scale.get_midi_note(root, left_base_octave + 1, base_deg);
+                    let t = scale.get_midi_note(root, left_base_octave + 1, base_deg + 2);
+                    let f = scale.get_midi_note(root, left_base_octave + 1, base_deg + 4);
+                    vec![r, t, f]
+                }
+                _ => {
+                    let base_deg = key.col;
+                    let r = scale.get_midi_note(root, left_base_octave + 1, base_deg);
+                    let t = scale.get_midi_note(root, left_base_octave + 1, base_deg + 2);
+                    let f = scale.get_midi_note(root, left_base_octave + 1, base_deg + 4);
+                    let s = scale.get_midi_note(root, left_base_octave + 1, base_deg + 6);
+                    vec![r, t, f, s]
+                }
+            },
+            HandSide::Right => {
+                let deg = (3 - key.row) * 5 + key.col;
+                vec![scale.get_midi_note(root, right_base_octave, deg)]
+            }
+        },
+        LayoutPreset::LinearContinuous => {
+            let global_col = if key.hand == HandSide::Left {
+                key.col
+            } else {
+                key.col + 5
+            };
+            let deg = (3 - key.row) * 10 + global_col;
+            vec![scale.get_midi_note(root, left_base_octave, deg)]
+        }
+    }
+}
+
+pub fn get_key_display_info(
+    key: &KeyMappingDef,
+    root: RootNote,
+    scale: ScaleType,
+    left_base_octave: i8,
+    right_base_octave: i8,
+    preset: LayoutPreset,
+) -> (String, String, bool) {
+    let notes = calculate_key_notes(key, root, scale, left_base_octave, right_base_octave, preset);
+    let primary_note = notes.first().copied().unwrap_or(60);
+    let is_root = scale.is_root(root, primary_note);
+
+    match preset {
+        LayoutPreset::LinearSplit => {
+            let note_str = format_midi_note(primary_note);
+            let degree = scale.degree_label(key.degree_index).to_string();
+            (note_str, degree, is_root)
+        }
+        LayoutPreset::OctaveStacked => {
+            let note_str = format_midi_note(primary_note);
+            let global_col = if key.hand == HandSide::Left {
+                key.col
+            } else {
+                key.col + 5
+            };
+            let degree = scale.degree_label(global_col).to_string();
+            (note_str, degree, is_root)
+        }
+        LayoutPreset::IsomorphicFourths => {
+            let note_str = format_midi_note(primary_note);
+            let row_deg = (3 - key.row) * 3;
+            let deg = row_deg + key.col;
+            let degree = scale.degree_label(deg).to_string();
+            (note_str, degree, is_root)
+        }
+        LayoutPreset::ChordBassMelody => {
+            if key.hand == HandSide::Left {
+                match key.row {
+                    3 => {
+                        let note_str = format_midi_note(primary_note);
+                        let degree = format!("Bass {}", scale.degree_label(key.col));
+                        (note_str, degree, is_root)
+                    }
+                    2 => {
+                        let romans = ["I", "ii", "iii", "IV", "V"];
+                        let roman = romans.get(key.col).copied().unwrap_or("Triad");
+                        let note_str = format!("{roman} (3)");
+                        let degree = format_midi_note(primary_note);
+                        (note_str, degree, key.col == 0)
+                    }
+                    1 => {
+                        let romans = ["vi", "vii°", "I+", "ii+", "iii+"];
+                        let roman = romans.get(key.col).copied().unwrap_or("Triad");
+                        let note_str = format!("{roman} (3)");
+                        let degree = format_midi_note(primary_note);
+                        (note_str, degree, false)
+                    }
+                    _ => {
+                        let romans = ["I7", "ii7", "iii7", "IV7", "V7"];
+                        let roman = romans.get(key.col).copied().unwrap_or("7th");
+                        let note_str = format!("{roman} (4)");
+                        let degree = format_midi_note(primary_note);
+                        (note_str, degree, key.col == 0)
+                    }
+                }
+            } else {
+                let note_str = format_midi_note(primary_note);
+                let deg = (3 - key.row) * 5 + key.col;
+                let degree = scale.degree_label(deg).to_string();
+                (note_str, degree, is_root)
+            }
+        }
+        LayoutPreset::LinearContinuous => {
+            let note_str = format_midi_note(primary_note);
+            let global_col = if key.hand == HandSide::Left {
+                key.col
+            } else {
+                key.col + 5
+            };
+            let deg = (3 - key.row) * 10 + global_col;
+            let degree = scale.degree_label(deg).to_string();
+            (note_str, degree, is_root)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -155,5 +356,55 @@ mod tests {
         // Right hand highest: 0 = degree 19
         let key_0 = find_key_by_label("0").unwrap();
         assert_eq!(key_0.degree_index, 19);
+    }
+
+    #[test]
+    fn test_preset_octave_stacked_vertical_alignment() {
+        let z = find_key_by_label("Z").unwrap(); // row 3, col 0
+        let a = find_key_by_label("A").unwrap(); // row 2, col 0
+        let q = find_key_by_label("Q").unwrap(); // row 1, col 0
+        let key_1 = find_key_by_label("1").unwrap(); // row 0, col 0
+
+        let root = RootNote::C;
+        let scale = ScaleType::Major;
+        let left_oct = 2;
+        let right_oct = 4;
+        let preset = LayoutPreset::OctaveStacked;
+
+        let note_z = calculate_key_notes(z, root, scale, left_oct, right_oct, preset)[0];
+        let note_a = calculate_key_notes(a, root, scale, left_oct, right_oct, preset)[0];
+        let note_q = calculate_key_notes(q, root, scale, left_oct, right_oct, preset)[0];
+        let note_1 = calculate_key_notes(key_1, root, scale, left_oct, right_oct, preset)[0];
+
+        // Each row should be exactly 12 semitones (1 octave) higher
+        assert_eq!(note_a, note_z + 12);
+        assert_eq!(note_q, note_a + 12);
+        assert_eq!(note_1, note_q + 12);
+    }
+
+    #[test]
+    fn test_preset_chord_bass_melody() {
+        let root = RootNote::C;
+        let scale = ScaleType::Major;
+        let left_oct = 2;
+        let right_oct = 4;
+        let preset = LayoutPreset::ChordBassMelody;
+
+        // A key is Row 2, Col 0 -> C Major Triad (C3, E3, G3)
+        let a = find_key_by_label("A").unwrap();
+        let chord = calculate_key_notes(a, root, scale, left_oct, right_oct, preset);
+        assert_eq!(chord.len(), 3);
+        assert_eq!(chord[0], 48); // C3
+        assert_eq!(chord[1], 52); // E3
+        assert_eq!(chord[2], 55); // G3
+
+        // 1 key is Row 0, Col 0 -> C Major 7th (C3, E3, G3, B3)
+        let key_1 = find_key_by_label("1").unwrap();
+        let chord_7th = calculate_key_notes(key_1, root, scale, left_oct, right_oct, preset);
+        assert_eq!(chord_7th.len(), 4);
+        assert_eq!(chord_7th[0], 48); // C3
+        assert_eq!(chord_7th[1], 52); // E3
+        assert_eq!(chord_7th[2], 55); // G3
+        assert_eq!(chord_7th[3], 59); // B3
     }
 }
