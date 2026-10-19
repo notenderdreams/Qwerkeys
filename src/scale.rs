@@ -156,6 +156,7 @@ impl ScaleType {
         note.clamp(0, 127) as u8
     }
 
+    #[allow(dead_code)]
     pub fn is_in_scale(&self, root: RootNote, note: u8) -> bool {
         let pitch_class = (note % 12) as i16;
         let root_class = root.semitone() as i16;

@@ -112,9 +112,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Run native macOS GUI on main thread
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1040.0, 500.0])
-            .with_min_inner_size([920.0, 465.0])
-            .with_title("Qwerkeys • Dedicated MIDI Keyboard"),
+            .with_inner_size([1160.0, 740.0])
+            .with_min_inner_size([1040.0, 663.4])
+            .with_title("Qwerkeys • In-Scale MIDI Performance Keyboard"),
         ..Default::default()
     };
 
