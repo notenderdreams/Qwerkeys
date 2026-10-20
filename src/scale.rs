@@ -122,6 +122,7 @@ impl ScaleType {
         }
     }
 
+    #[allow(dead_code)]
     pub fn degree_label(&self, degree_index: usize) -> &'static str {
         let labels: &'static [&'static str] = match self {
             ScaleType::NaturalMinor => &["Root", "2nd", "m3rd", "4th", "5th", "m6th", "m7th"],
@@ -143,12 +144,38 @@ impl ScaleType {
         labels[step]
     }
 
-    pub fn get_midi_note(&self, root: RootNote, base_octave: i8, degree_index: usize) -> u8 {
-        let intervals = self.intervals();
-        let num_notes = intervals.len();
+    pub fn degree_label_signed(&self, degree: i32) -> &'static str {
+        let labels: &'static [&'static str] = match self {
+            ScaleType::NaturalMinor => &["Root", "2nd", "m3rd", "4th", "5th", "m6th", "m7th"],
+            ScaleType::Major => &["Root", "2nd", "3rd", "4th", "5th", "6th", "7th"],
+            ScaleType::Dorian => &["Root", "2nd", "m3rd", "4th", "5th", "6th", "m7th"],
+            ScaleType::Phrygian => &["Root", "b2nd", "m3rd", "4th", "5th", "m6th", "m7th"],
+            ScaleType::Lydian => &["Root", "2nd", "3rd", "#4th", "5th", "6th", "7th"],
+            ScaleType::Mixolydian => &["Root", "2nd", "3rd", "4th", "5th", "6th", "m7th"],
+            ScaleType::HarmonicMinor => &["Root", "2nd", "m3rd", "4th", "5th", "m6th", "7th"],
+            ScaleType::MelodicMinor => &["Root", "2nd", "m3rd", "4th", "5th", "6th", "7th"],
+            ScaleType::MinorPentatonic => &["Root", "m3rd", "4th", "5th", "m7th"],
+            ScaleType::MajorPentatonic => &["Root", "2nd", "3rd", "5th", "6th"],
+            ScaleType::Blues => &["Root", "m3rd", "4th", "b5th", "5th", "m7th"],
+            ScaleType::JapaneseHirajoshi => &["Root", "2nd", "m3rd", "5th", "m6th"],
+            ScaleType::ArabicDoubleHarmonic => &["Root", "b2nd", "3rd", "4th", "5th", "b6th", "7th"],
+        };
 
-        let octave_shift = (degree_index / num_notes) as i8;
-        let scale_step = degree_index % num_notes;
+        let step = degree.rem_euclid(labels.len() as i32) as usize;
+        labels[step]
+    }
+
+    #[allow(dead_code)]
+    pub fn get_midi_note(&self, root: RootNote, base_octave: i8, degree_index: usize) -> u8 {
+        self.get_midi_note_signed(root, base_octave, degree_index as i32)
+    }
+
+    pub fn get_midi_note_signed(&self, root: RootNote, base_octave: i8, degree: i32) -> u8 {
+        let intervals = self.intervals();
+        let num_notes = intervals.len() as i32;
+
+        let octave_shift = degree.div_euclid(num_notes) as i8;
+        let scale_step = degree.rem_euclid(num_notes) as usize;
         let interval_semitones = intervals[scale_step];
 
         let total_octave = base_octave + octave_shift;

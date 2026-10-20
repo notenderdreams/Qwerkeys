@@ -84,7 +84,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     midi_engine.panic_all_notes();
 
     // Clean startup banner
-    println!("qwerkeys • in-scale dedicated midi keyboard");
+    println!("qwerkeys");
     println!("  Target:  {display_desc}");
     println!(
         "  Mode:    {}",
@@ -114,7 +114,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1160.0, 740.0])
             .with_min_inner_size([1040.0, 663.4])
-            .with_title("Qwerkeys • In-Scale MIDI Performance Keyboard"),
+            .with_title("Qwerkeys"),
         ..Default::default()
     };
 

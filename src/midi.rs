@@ -60,8 +60,9 @@ impl MidiEngine {
             let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
             let right_oct = self.state.right_base_octave.load(Ordering::SeqCst);
             let preset = self.state.get_layout_preset();
+            let pad = self.state.mapping_padding.load(Ordering::SeqCst);
 
-            let notes = calculate_key_notes(key, root, scale, left_oct, right_oct, preset);
+            let notes = calculate_key_notes(key, root, scale, left_oct, right_oct, preset, pad);
             let vel = self.state.velocity.load(Ordering::SeqCst);
 
             // Record active state

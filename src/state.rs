@@ -10,6 +10,8 @@ pub struct AppState {
     pub root: Mutex<RootNote>,
     pub scale: Mutex<ScaleType>,
     pub layout_preset: Mutex<LayoutPreset>,
+    pub base_octave: AtomicI8,
+    pub mapping_padding: AtomicI8,
     pub left_base_octave: AtomicI8,
     pub right_base_octave: AtomicI8,
     pub velocity: AtomicU8,
@@ -32,8 +34,10 @@ impl AppState {
             root: Mutex::new(RootNote::C),
             scale: Mutex::new(ScaleType::NaturalMinor),
             layout_preset: Mutex::new(LayoutPreset::LinearSplit),
-            left_base_octave: AtomicI8::new(2),
-            right_base_octave: AtomicI8::new(4),
+            base_octave: AtomicI8::new(4),
+            mapping_padding: AtomicI8::new(0),
+            left_base_octave: AtomicI8::new(3),
+            right_base_octave: AtomicI8::new(5),
             velocity: AtomicU8::new(100),
             sustain_held: AtomicBool::new(false),
 
@@ -90,6 +94,20 @@ impl AppState {
         self.request_repaint();
     }
 
+    pub fn set_base_octave(&self, oct: i8) {
+        let clamped = oct.clamp(0, 7);
+        self.base_octave.store(clamped, Ordering::SeqCst);
+        self.left_base_octave.store(clamped - 1, Ordering::SeqCst);
+        self.right_base_octave.store(clamped, Ordering::SeqCst);
+        self.request_repaint();
+    }
+
+    pub fn set_mapping_padding(&self, pad: i8) {
+        let clamped = pad.clamp(-7, 7);
+        self.mapping_padding.store(clamped, Ordering::SeqCst);
+        self.request_repaint();
+    }
+
     #[allow(dead_code)]
     pub fn get_selected_device(&self) -> Option<KeyboardDevice> {
         let ptr = self.selected_device_ptr.load(Ordering::SeqCst);
@@ -117,5 +135,23 @@ impl AppState {
         } else {
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mapping_padding_clamp() {
+        let state = AppState::new();
+        state.set_mapping_padding(10);
+        assert_eq!(state.mapping_padding.load(Ordering::SeqCst), 7);
+
+        state.set_mapping_padding(-10);
+        assert_eq!(state.mapping_padding.load(Ordering::SeqCst), -7);
+
+        state.set_mapping_padding(3);
+        assert_eq!(state.mapping_padding.load(Ordering::SeqCst), 3);
     }
 }
