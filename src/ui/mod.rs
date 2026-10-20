@@ -101,6 +101,7 @@ impl QwerkeysApp {
         state: Arc<AppState>,
         midi: Arc<MidiEngine>,
     ) -> Self {
+        egui_extras::install_image_loaders(&cc.egui_ctx);
         state.set_egui_ctx(cc.egui_ctx.clone());
 
         let current_theme = AppTheme::StudioSlate;

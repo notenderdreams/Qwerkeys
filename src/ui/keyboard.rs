@@ -43,19 +43,6 @@ impl QwerkeysApp {
                         .strong()
                         .color(theme.TEXT_PRIMARY),
                 );
-
-                Frame::NONE
-                    .fill(theme.SAGE_BADGE_BG)
-                    .stroke(Stroke::new(1.0, theme.SAGE_BORDER))
-                    .corner_radius(CornerRadius::same(3))
-                    .inner_margin(Margin::symmetric(6, 2))
-                    .show(ui, |ui| {
-                        ui.label(
-                            RichText::new(preset.name().to_uppercase())
-                                .font(FontId::monospace(8.0))
-                                .color(theme.SAGE_BADGE_TXT),
-                        );
-                    });
             });
 
             ui.add_space(6.0);
@@ -63,7 +50,6 @@ impl QwerkeysApp {
             // Keyboard frame enclosure
             Frame::NONE
                 .fill(theme.BG_KEYBOARD)
-                .stroke(Stroke::new(1.0, theme.BORDER_KEYBOARD))
                 .corner_radius(CornerRadius::same(6))
                 .inner_margin(Margin::symmetric(10, 8))
                 .show(ui, |ui| {
@@ -634,14 +620,8 @@ impl QwerkeysApp {
             if sub_text == "⌃" {
                 // Vector-drawn crisp Caret / Control symbol
                 let tip = top_pos + vec2(0.0, -2.5);
-                painter.line_segment(
-                    [tip + vec2(-3.5, 3.5), tip],
-                    Stroke::new(1.3, icon_color),
-                );
-                painter.line_segment(
-                    [tip, tip + vec2(3.5, 3.5)],
-                    Stroke::new(1.3, icon_color),
-                );
+                painter.line_segment([tip + vec2(-3.5, 3.5), tip], Stroke::new(1.3, icon_color));
+                painter.line_segment([tip, tip + vec2(3.5, 3.5)], Stroke::new(1.3, icon_color));
             } else if sub_text == "⌥" {
                 // Vector-drawn crisp Option / Alt symbol
                 let o_pos = top_pos;
@@ -828,7 +808,13 @@ impl QwerkeysApp {
         self.paint_single_arrow(painter, right_rect, "right", right_resp.hovered());
     }
 
-    fn paint_single_arrow(&self, painter: &egui::Painter, rect: Rect, direction: &str, hovered: bool) {
+    fn paint_single_arrow(
+        &self,
+        painter: &egui::Painter,
+        rect: Rect,
+        direction: &str,
+        hovered: bool,
+    ) {
         let theme = self.theme_colors;
         painter.rect(
             rect,
