@@ -2,16 +2,22 @@ use egui::Color32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AppTheme {
+    StudioDaylight,
     #[default]
     StudioSlate,
     StudioSage,
 }
 
 impl AppTheme {
-    pub const ALL: [AppTheme; 2] = [AppTheme::StudioSlate, AppTheme::StudioSage];
+    pub const ALL: [AppTheme; 3] = [
+        AppTheme::StudioSlate,
+        AppTheme::StudioSage,
+        AppTheme::StudioDaylight,
+    ];
 
     pub fn name(&self) -> &'static str {
         match self {
+            AppTheme::StudioDaylight => "Studio Daylight",
             AppTheme::StudioSlate => "Studio Slate",
             AppTheme::StudioSage => "Studio Sage",
         }
@@ -19,13 +25,22 @@ impl AppTheme {
 
     pub fn description(&self) -> &'static str {
         match self {
+            AppTheme::StudioDaylight => "Bright silver aluminum with slate-blue accents",
             AppTheme::StudioSlate => "Refined dark graphite with slate-blue accents",
             AppTheme::StudioSage => "Warm dark studio with organic sage green accents",
         }
     }
 
+    /// Light themes need egui's light base visuals (menus, sliders, etc.)
+    pub fn is_light(&self) -> bool {
+        matches!(self, AppTheme::StudioDaylight)
+    }
+}
+
+impl AppTheme {
     pub fn colors(&self) -> ThemeColors {
         match self {
+            AppTheme::StudioDaylight => ThemeColors::studio_daylight(),
             AppTheme::StudioSlate => ThemeColors::studio_slate(),
             AppTheme::StudioSage => ThemeColors::studio_sage(),
         }
@@ -108,10 +123,74 @@ pub struct ThemeColors {
 }
 
 impl ThemeColors {
+    pub fn studio_daylight() -> Self {
+        Self {
+            BG_APP: Color32::from_rgb(0xF2, 0xF3, 0xF5),
+            BG_BAR: Color32::from_rgb(0xE9, 0xEB, 0xED),
+            BG_PANEL: Color32::from_rgb(0xFF, 0xFF, 0xFF),
+            BG_KEYBOARD: Color32::from_rgb(0xE1, 0xE3, 0xE6),
+            BG_FIELD: Color32::from_rgb(0xF0, 0xF1, 0xF3),
+            BG_BUTTON: Color32::from_rgb(0xDF, 0xE1, 0xE4),
+            BG_BUTTON_HOVER: Color32::from_rgb(0xCD, 0xD0, 0xD4),
+            BORDER_DARK: Color32::from_rgb(0xC2, 0xC5, 0xC9),
+            BORDER_PANEL: Color32::from_rgb(0xDC, 0xDF, 0xE3),
+            BORDER_KEYBOARD: Color32::from_rgb(0xB8, 0xBB, 0xC0),
+            BORDER_FIELD: Color32::from_rgb(0xC6, 0xCA, 0xCE),
+            BORDER_GRID: Color32::from_rgb(0xB8, 0xBC, 0xC2),
+            SAGE_ACCENT: Color32::from_rgb(0x54, 0x5A, 0x99),
+            SAGE_ACTIVE: Color32::from_rgb(0x4A, 0x50, 0x90),
+            SAGE_BORDER: Color32::from_rgb(0x54, 0x5A, 0x99),
+            SAGE_BADGE_BG: Color32::from_rgb(0xE7, 0xEA, 0xF8),
+            SAGE_BADGE_TXT: Color32::from_rgb(0x3B, 0x42, 0x70),
+            SAGE_SELECTED_BG: Color32::from_rgb(0x54, 0x5A, 0x99),
+            SAGE_SELECTED_TXT: Color32::from_rgb(0xFF, 0xFF, 0xFF),
+            TEXT_PRIMARY: Color32::from_rgb(0x1E, 0x1F, 0x23),
+            TEXT_SECONDARY: Color32::from_rgb(0x40, 0x43, 0x4A),
+            TEXT_MUTED: Color32::from_rgb(0x7A, 0x7E, 0x85),
+            TEXT_LIGHT_MUTED: Color32::from_rgb(0x9D, 0xA0, 0xA7),
+            TEXT_HEADING: Color32::from_rgb(0x43, 0x46, 0x4E),
+            KEY_UNMAPPED_BG: Color32::from_rgb(0xDA, 0xDD, 0xDF),
+            KEY_UNMAPPED_BORDER: Color32::from_rgb(0xC3, 0xC6, 0xC9),
+            KEY_UNMAPPED_TXT: Color32::from_rgb(0x8F, 0x92, 0x98),
+            KEY_MAPPED_BG: Color32::from_rgb(0xFA, 0xFA, 0xFC),
+            KEY_MAPPED_BORDER: Color32::from_rgb(0xBC, 0xC3, 0xE2),
+            KEY_MAPPED_TXT: Color32::from_rgb(0x3E, 0x45, 0x70),
+            KEY_MAPPED_SUB: Color32::from_rgb(0x76, 0x7E, 0xA8),
+            KEY_ROOT_BG: Color32::from_rgb(0xE2, 0xE7, 0xFA),
+            KEY_ROOT_BORDER: Color32::from_rgb(0x54, 0x5A, 0x99),
+            KEY_ACTIVE_BG: Color32::from_rgb(0x54, 0x5A, 0x99),
+            KEY_ACTIVE_BORDER: Color32::from_rgb(0x33, 0x39, 0x5E),
+            KEY_ACTIVE_TXT: Color32::from_rgb(0xFF, 0xFF, 0xFF),
+            PIANO_WHITE_BG: Color32::from_rgb(0xF7, 0xF8, 0xFA),
+            PIANO_WHITE_BORDER: Color32::from_rgb(0xC9, 0xCC, 0xD0),
+            PIANO_WHITE_ROOT: Color32::from_rgb(0xC5, 0xCE, 0xF0),
+            PIANO_WHITE_ACTIVE: Color32::from_rgb(0x54, 0x5A, 0x99),
+            PIANO_WHITE_NOTE: Color32::from_rgb(0x3B, 0x40, 0x4E),
+            PIANO_BLACK_BG: Color32::from_rgb(0x1B, 0x1D, 0x21),
+            PIANO_BLACK_BORDER: Color32::from_rgb(0x0E, 0x0F, 0x11),
+            PIANO_BLACK_ACTIVE: Color32::from_rgb(0x54, 0x5A, 0x99),
+            PIANO_BLACK_TXT: Color32::from_rgb(0xB2, 0xB2, 0xB2),
+            DOT_LIT: Color32::from_rgb(0x54, 0x5A, 0x99),
+            DOT_UNLIT: Color32::from_rgb(0xC9, 0xCC, 0xD0),
+            KEY_SUB_TRIGGERED: Color32::from_rgb(0xF2, 0xF4, 0xFE),
+            KEY_LABEL_SHIFT_TRIGGERED: Color32::from_rgb(0xE4, 0xE7, 0xF8),
+            KEY_LABEL_KEY_TRIGGERED: Color32::from_rgb(0xEE, 0xF0, 0xFB),
+            PIANO_WHITE_MAPPED_ROOT_TXT: Color32::from_rgb(0x2A, 0x30, 0x57),
+            PIANO_WHITE_MAPPED_TXT: Color32::from_rgb(0x3E, 0x45, 0x70),
+            PIANO_WHITE_ROOT_TXT: Color32::from_rgb(0x1E, 0x24, 0x4A),
+            PIANO_WHITE_OUT_SCALE_TXT: Color32::from_rgb(0x9B, 0x9E, 0xA6),
+            PIANO_WHITE_OUT_SCALE_BG: Color32::from_rgb(0xD9, 0xDC, 0xE0),
+            PIANO_BLACK_IN_SCALE_BG: Color32::from_rgb(0x2E, 0x35, 0x50),
+            PIANO_BLACK_ROOT_BG: Color32::from_rgb(0x45, 0x4E, 0x7E),
+            PIANO_BLACK_IN_SCALE_TXT: Color32::from_rgb(0xCF, 0xD5, 0xF2),
+            PIANO_BLACK_OUT_SCALE_TXT: Color32::from_rgb(0x4A, 0x4E, 0x5F),
+        }
+    }
+
     pub fn studio_slate() -> Self {
         Self {
             BG_APP: Color32::from_rgb(0x23, 0x23, 0x23),
-            BG_BAR: Color32::from_rgb(0x2B, 0x2B, 0x2B),
+            BG_BAR: Color32::from_rgb(0x34, 0x34, 0x36),
             BG_PANEL: Color32::from_rgb(0x30, 0x30, 0x30),
             BG_KEYBOARD: Color32::from_rgb(0x1C, 0x1C, 0x1C),
             BG_FIELD: Color32::from_rgb(0x29, 0x29, 0x29),
@@ -175,7 +254,7 @@ impl ThemeColors {
     pub fn studio_sage() -> Self {
         Self {
             BG_APP: Color32::from_rgb(0x15, 0x15, 0x15),
-            BG_BAR: Color32::from_rgb(0x1B, 0x1B, 0x1B),
+            BG_BAR: Color32::from_rgb(0x24, 0x26, 0x24),
             BG_PANEL: Color32::from_rgb(0x20, 0x20, 0x20),
             BG_KEYBOARD: Color32::from_rgb(0x18, 0x18, 0x18),
             BG_FIELD: Color32::from_rgb(0x2A, 0x2A, 0x2A),

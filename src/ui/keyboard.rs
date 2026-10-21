@@ -10,6 +10,126 @@ use crate::scale::{RootNote, ScaleType};
 
 use super::QwerkeysApp;
 
+/// Keycap skins for the keyboard widget — light aluminum or charcoal "blackbook",
+/// selected per app theme.
+#[allow(non_snake_case)]
+#[derive(Debug, Clone, Copy)]
+pub(super) struct KeySkin {
+    /// enclosure body around the keys
+    pub BODY: Color32,
+    pub FACE: Color32,
+    pub FACE_HOVER: Color32,
+    /// piano black-key face
+    pub FACE_DARK: Color32,
+    pub BORDER: Color32,
+    pub BEVEL_MID: Color32,
+    pub BEVEL_DEEP: Color32,
+    pub TEXT: Color32,
+    pub TEXT_SOFT: Color32,
+    pub LIGHT: bool,
+}
+
+impl KeySkin {
+    /// Light aluminum MacBook skin (Studio Daylight)
+    pub(super) fn aluminum() -> Self {
+        Self {
+            BODY: Color32::from_rgb(0xD7, 0xDA, 0xDD),
+            FACE: Color32::from_rgb(0xEF, 0xF0, 0xF2),
+            FACE_HOVER: Color32::from_rgb(0xE4, 0xE6, 0xE8),
+            FACE_DARK: Color32::from_rgb(0x1B, 0x1D, 0x21),
+            BORDER: Color32::from_rgb(0xAE, 0xB1, 0xB4),
+            BEVEL_MID: Color32::from_rgb(0xC6, 0xC9, 0xCC),
+            BEVEL_DEEP: Color32::from_rgb(0x9A, 0x9D, 0x9F),
+            TEXT: Color32::from_rgb(0x64, 0x67, 0x6C),
+            TEXT_SOFT: Color32::from_rgb(0x92, 0x96, 0x9B),
+            LIGHT: true,
+        }
+    }
+
+    /// Dark "blackbook" skin — charcoal caps on a lighter body (dark modes)
+    pub(super) fn carbon() -> Self {
+        Self {
+            BODY: Color32::from_rgb(0x3A, 0x3C, 0x40),
+            FACE: Color32::from_rgb(0x1C, 0x1D, 0x1F),
+            FACE_HOVER: Color32::from_rgb(0x25, 0x26, 0x29),
+            FACE_DARK: Color32::from_rgb(0x12, 0x13, 0x15),
+            BORDER: Color32::from_rgb(0x19, 0x1A, 0x1C),
+            BEVEL_MID: Color32::from_rgb(0x1B, 0x1C, 0x1E),
+            BEVEL_DEEP: Color32::from_rgb(0x0E, 0x0F, 0x10),
+            TEXT: Color32::from_rgb(0xC4, 0xC5, 0xC7),
+            TEXT_SOFT: Color32::from_rgb(0x8C, 0x8D, 0x90),
+            LIGHT: false,
+        }
+    }
+
+    pub(super) fn from_light(light: bool) -> Self {
+        if light {
+            Self::aluminum()
+        } else {
+            Self::carbon()
+        }
+    }
+}
+
+pub(super) fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
+    let lerp = |x: f32, y: f32| (x + (y - x) * t) as u8;
+    Color32::from_rgba_unmultiplied(
+        lerp(a.r() as f32, b.r() as f32),
+        lerp(a.g() as f32, b.g() as f32),
+        lerp(a.b() as f32, b.b() as f32),
+        lerp(a.a() as f32, b.a() as f32),
+    )
+}
+
+/// Corner profile used by the QWERTY keycaps.
+pub(super) const KEYCAP_CORNER: CornerRadius = CornerRadius::same(5);
+
+/// Paints one mac-style keycap face: stacked drop layers simulate the key's
+/// 3D depth, a soft top sheen stands in for the CSS inner-glow shadow, and
+/// `depressed` (a pressed key) drops the bevel so the cap sits flush.
+pub(super) fn draw_mac_keycap(
+    skin: &KeySkin,
+    painter: &egui::Painter,
+    rect: Rect,
+    corner: CornerRadius,
+    face: Color32,
+    border: Color32,
+    depressed: bool,
+) {
+    if !depressed {
+        // Box-shadow bevel: `0 1px 0 #cfcfcf, 0 1px 1px #6f6f6f`
+        painter.rect(
+            Rect::from_min_size(rect.min + vec2(0.0, 1.0), rect.size()),
+            corner,
+            skin.BEVEL_MID,
+            Stroke::NONE,
+            egui::StrokeKind::Outside,
+        );
+        painter.rect(
+            Rect::from_min_size(rect.min + vec2(0.0, 2.0), rect.size()),
+            corner,
+            skin.BEVEL_DEEP,
+            Stroke::NONE,
+            egui::StrokeKind::Outside,
+        );
+    }
+
+    painter.rect(rect, corner, face, Stroke::new(0.75, border), egui::StrokeKind::Inside);
+
+    // Inset glow: `inset 1px 0 25px #dfdfdf`
+    // Light aluminum caps get the full glossy sheen; dark keys get a barely-there hint.
+    let (strong_a, soft_a) = if skin.LIGHT { (38, 14) } else { (8, 2) };
+    let sheen_strong = Color32::from_rgba_unmultiplied(255, 255, 255, strong_a);
+    let sheen_soft = Color32::from_rgba_unmultiplied(255, 255, 255, soft_a);
+    let inner = rect.shrink2(vec2(1.5, 1.5));
+    let wide = inner.width();
+    let band_corner = CornerRadius::same(4);
+    let band1 = Rect::from_min_max(inner.min, inner.min + vec2(wide, inner.height() * 0.28));
+    let band2 = Rect::from_min_max(band1.max, inner.min + vec2(wide, inner.height() * 0.55));
+    painter.rect(band1, band_corner, sheen_strong, Stroke::NONE, egui::StrokeKind::Inside);
+    painter.rect(band2, band_corner, sheen_soft, Stroke::NONE, egui::StrokeKind::Inside);
+}
+
 enum QwertyKeyDef {
     Playable {
         label: &'static str,
@@ -28,6 +148,7 @@ enum QwertyKeyDef {
 impl QwerkeysApp {
     pub(super) fn render_qwerty_keyboard(&mut self, ui: &mut Ui) {
         let theme = self.theme_colors;
+        let skin = KeySkin::from_light(self.current_theme.is_light());
         let root = self.state.get_root();
         let scale = self.state.get_scale();
         let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
@@ -47,11 +168,11 @@ impl QwerkeysApp {
 
             ui.add_space(6.0);
 
-            // Keyboard frame enclosure
+            // Aluminum keyboard enclosure (mac body)
             Frame::NONE
-                .fill(theme.BG_KEYBOARD)
-                .corner_radius(CornerRadius::same(6))
-                .inner_margin(Margin::symmetric(10, 8))
+                .fill(skin.BODY)
+                .corner_radius(CornerRadius::same(10))
+                .inner_margin(Margin::symmetric(12, 10))
                 .show(ui, |ui| {
                     use QwertyKeyDef::*;
                     let rows: [&[QwertyKeyDef]; 5] = [
@@ -441,32 +562,25 @@ impl QwerkeysApp {
         padding: i8,
     ) {
         let theme = self.theme_colors;
+        let skin = KeySkin::from_light(self.current_theme.is_light());
         let (note_str, degree, is_root) =
             get_key_display_info(key, root, scale, left_oct, right_oct, preset, padding);
 
         let is_triggered = self.state.is_key_active(key.usage);
 
-        let (fill, stroke, text_color, sub_color) = if is_triggered {
-            (
-                theme.KEY_ACTIVE_BG,
-                theme.KEY_ACTIVE_BORDER,
-                theme.KEY_ACTIVE_TXT,
-                theme.KEY_SUB_TRIGGERED,
-            )
+        let (fill, border) = if is_triggered {
+            // Pressed: accent face, bevel collapsed (depressed cap)
+            (theme.KEY_ACTIVE_BG, theme.KEY_ACTIVE_BORDER)
         } else if is_root {
-            (
-                theme.KEY_ROOT_BG,
-                theme.KEY_ROOT_BORDER,
-                theme.TEXT_PRIMARY,
-                theme.SAGE_ACCENT,
-            )
+            // Root keys: no accent tint on the cap, just a touch lighter than plain keys
+            let root_face = if skin.LIGHT {
+                mix(skin.FACE, Color32::WHITE, 0.50)
+            } else {
+                mix(skin.FACE, Color32::WHITE, 0.14)
+            };
+            (root_face, skin.BORDER)
         } else {
-            (
-                theme.KEY_MAPPED_BG,
-                theme.KEY_MAPPED_BORDER,
-                theme.KEY_MAPPED_TXT,
-                theme.KEY_MAPPED_SUB,
-            )
+            (skin.FACE, mix(skin.BORDER, theme.SAGE_ACCENT, 0.22))
         };
 
         let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::click_and_drag());
@@ -482,14 +596,14 @@ impl QwerkeysApp {
         }
 
         let painter = ui.painter();
+        draw_mac_keycap(&skin,
+            painter, rect, KEYCAP_CORNER, fill, border, is_triggered);
 
-        painter.rect(
-            rect,
-            CornerRadius::same(4),
-            fill,
-            Stroke::new(if is_triggered || is_root { 1.5 } else { 1.0 }, stroke),
-            egui::StrokeKind::Inside,
-        );
+        let (label_color, soft_color) = if is_triggered {
+            (theme.KEY_LABEL_KEY_TRIGGERED, theme.KEY_LABEL_SHIFT_TRIGGERED)
+        } else {
+            (skin.TEXT, skin.TEXT_SOFT)
+        };
 
         // Top key label: shift symbol + physical key label (e.g. "!" / "1" or "Q")
         if let Some(sc) = shift_char {
@@ -498,22 +612,14 @@ impl QwerkeysApp {
                 Align2::LEFT_TOP,
                 sc,
                 FontId::proportional(8.0),
-                if is_triggered {
-                    theme.KEY_LABEL_SHIFT_TRIGGERED
-                } else {
-                    theme.TEXT_MUTED
-                },
+                soft_color,
             );
             painter.text(
                 rect.min + vec2(6.0, 12.0),
                 Align2::LEFT_TOP,
                 key.label,
                 FontId::proportional(9.0),
-                if is_triggered {
-                    theme.KEY_LABEL_KEY_TRIGGERED
-                } else {
-                    theme.TEXT_LIGHT_MUTED
-                },
+                label_color,
             );
         } else {
             painter.text(
@@ -521,11 +627,7 @@ impl QwerkeysApp {
                 Align2::LEFT_TOP,
                 key.label,
                 FontId::proportional(9.5),
-                if is_triggered {
-                    theme.KEY_LABEL_KEY_TRIGGERED
-                } else {
-                    theme.TEXT_MUTED
-                },
+                label_color,
             );
         }
 
@@ -540,28 +642,44 @@ impl QwerkeysApp {
                     if is_triggered {
                         Color32::WHITE
                     } else {
-                        theme.TEXT_MUTED
+                        skin.TEXT_SOFT
                     },
                 ),
             );
         }
 
         // Center note label (e.g. C2, D#3, I(3))
+        let note_color = if is_triggered {
+            theme.KEY_ACTIVE_TXT
+        } else if skin.LIGHT {
+            // readable dark accent on light caps
+            mix(theme.SAGE_ACCENT, Color32::BLACK, if is_root { 0.62 } else { 0.45 })
+        } else {
+            // readable light accent on charcoal caps
+            mix(theme.SAGE_ACCENT, Color32::WHITE, if is_root { 0.70 } else { 0.50 })
+        };
         painter.text(
             rect.center() + vec2(0.0, -1.0),
             Align2::CENTER_CENTER,
             &note_str,
             FontId::proportional(13.0),
-            text_color,
+            note_color,
         );
 
         // Bottom-center degree label (e.g. Root, m3rd, 5th)
+        let degree_color = if is_triggered {
+            theme.KEY_SUB_TRIGGERED
+        } else if skin.LIGHT {
+            mix(theme.SAGE_ACCENT, Color32::BLACK, 0.18)
+        } else {
+            mix(theme.SAGE_ACCENT, Color32::WHITE, 0.62)
+        };
         painter.text(
             rect.center() + vec2(0.0, 13.0),
             Align2::CENTER_CENTER,
             degree,
             FontId::monospace(8.0),
-            sub_color,
+            degree_color,
         );
     }
 
@@ -575,27 +693,22 @@ impl QwerkeysApp {
         align_right: bool,
     ) {
         let theme = self.theme_colors;
+        let skin = KeySkin::from_light(self.current_theme.is_light());
         let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
         let painter = ui.painter();
         let hovered = response.hovered();
 
-        painter.rect(
+        draw_mac_keycap(&skin,
+            painter,
             rect,
-            CornerRadius::same(4),
-            if hovered {
-                theme.BG_BUTTON_HOVER
-            } else {
-                theme.KEY_UNMAPPED_BG
-            },
-            Stroke::new(1.0, theme.BORDER_DARK),
-            egui::StrokeKind::Inside,
+            KEYCAP_CORNER,
+            if hovered { skin.FACE_HOVER } else { skin.FACE },
+            skin.BORDER,
+            false,
         );
 
-        let text_color = if hovered {
-            theme.TEXT_PRIMARY
-        } else {
-            theme.TEXT_MUTED
-        };
+        let text_color = skin.TEXT;
+        let icon_color = if hovered { skin.TEXT } else { skin.TEXT_SOFT };
 
         if label == "caps lock" {
             // Paint caps lock green dot
@@ -609,11 +722,6 @@ impl QwerkeysApp {
             );
         } else if let Some(sub_text) = sub {
             // Top and bottom dual label (e.g. fn / 🌐, control / ⌃, option / ⌥, ~ / `)
-            let icon_color = if hovered {
-                theme.TEXT_PRIMARY
-            } else {
-                theme.TEXT_MUTED
-            };
 
             let top_pos = rect.min + vec2(if align_right { width - 8.0 } else { 8.0 }, 7.0);
 
@@ -655,7 +763,7 @@ impl QwerkeysApp {
                     },
                     sub_text,
                     FontId::proportional(8.5),
-                    theme.TEXT_MUTED,
+                    icon_color,
                 );
             }
 
@@ -691,12 +799,13 @@ impl QwerkeysApp {
 
     fn render_spacebar_keycap(&mut self, ui: &mut Ui, width: f32, height: f32) {
         let theme = self.theme_colors;
+        let skin = KeySkin::from_light(self.current_theme.is_light());
         let is_sustain = self.state.sustain_held.load(Ordering::SeqCst);
 
-        let (fill, stroke, text_color) = if is_sustain {
-            (theme.KEY_ACTIVE_BG, theme.KEY_ACTIVE_BORDER, Color32::WHITE)
+        let (fill, stroke) = if is_sustain {
+            (theme.KEY_ACTIVE_BG, theme.KEY_ACTIVE_BORDER)
         } else {
-            (theme.KEY_UNMAPPED_BG, theme.BORDER_DARK, theme.TEXT_MUTED)
+            (skin.FACE, skin.BORDER)
         };
 
         let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::click_and_drag());
@@ -711,18 +820,19 @@ impl QwerkeysApp {
         }
 
         let painter = ui.painter();
-        painter.rect(
-            rect,
-            CornerRadius::same(4),
-            fill,
-            Stroke::new(if is_sustain { 1.5 } else { 1.0 }, stroke),
-            egui::StrokeKind::Inside,
-        );
+        draw_mac_keycap(&skin,
+            painter, rect, KEYCAP_CORNER, fill, stroke, is_sustain);
 
         let label = if is_sustain {
             "SUSTAIN ON (CC 64) — ALL NOTES HELD"
         } else {
             "space"
+        };
+
+        let text_color = if is_sustain {
+            theme.KEY_ACTIVE_TXT
+        } else {
+            skin.TEXT
         };
 
         painter.text(
@@ -815,24 +925,17 @@ impl QwerkeysApp {
         direction: &str,
         hovered: bool,
     ) {
-        let theme = self.theme_colors;
-        painter.rect(
+        let skin = KeySkin::from_light(self.current_theme.is_light());
+        draw_mac_keycap(&skin,
+            painter,
             rect,
-            CornerRadius::same(3),
-            if hovered {
-                theme.BG_BUTTON_HOVER
-            } else {
-                theme.KEY_UNMAPPED_BG
-            },
-            Stroke::new(1.0, theme.BORDER_DARK),
-            egui::StrokeKind::Inside,
+            KEYCAP_CORNER,
+            if hovered { skin.FACE_HOVER } else { skin.FACE },
+            skin.BORDER,
+            false,
         );
 
-        let arrow_color = if hovered {
-            theme.TEXT_PRIMARY
-        } else {
-            theme.TEXT_MUTED
-        };
+        let arrow_color = if hovered { skin.TEXT } else { skin.TEXT_SOFT };
 
         let center = rect.center();
         let size = 3.5;

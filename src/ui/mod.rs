@@ -104,10 +104,14 @@ impl QwerkeysApp {
         egui_extras::install_image_loaders(&cc.egui_ctx);
         state.set_egui_ctx(cc.egui_ctx.clone());
 
-        let current_theme = AppTheme::StudioSlate;
+        let current_theme = AppTheme::default();
         let theme_colors = current_theme.colors();
 
-        let mut visuals = egui::Visuals::dark();
+        let mut visuals = if current_theme.is_light() {
+            egui::Visuals::light()
+        } else {
+            egui::Visuals::dark()
+        };
         visuals.panel_fill = theme_colors.BG_APP;
         visuals.window_fill = theme_colors.BG_APP;
         visuals.override_text_color = Some(theme_colors.TEXT_SECONDARY);
@@ -129,7 +133,11 @@ impl QwerkeysApp {
     pub(super) fn set_theme(&mut self, theme: AppTheme, ctx: &egui::Context) {
         self.current_theme = theme;
         self.theme_colors = theme.colors();
-        let mut visuals = egui::Visuals::dark();
+        let mut visuals = if theme.is_light() {
+            egui::Visuals::light()
+        } else {
+            egui::Visuals::dark()
+        };
         visuals.panel_fill = self.theme_colors.BG_APP;
         visuals.window_fill = self.theme_colors.BG_APP;
         visuals.override_text_color = Some(self.theme_colors.TEXT_SECONDARY);
@@ -146,12 +154,12 @@ impl eframe::App for QwerkeysApp {
         self.state.set_egui_ctx(ctx.clone());
 
         #[cfg(target_os = "macos")]
-        if !self.aspect_ratio_set && try_set_macos_aspect_ratio(1160.0, 740.0) {
+        if !self.aspect_ratio_set && try_set_macos_aspect_ratio(1160.0, 780.0) {
             self.aspect_ratio_set = true;
         }
 
         // Maintain aspect ratio if resized on platforms without native aspect ratio locking
-        let target_ratio = 1160.0 / 740.0;
+        let target_ratio = 1160.0 / 780.0;
         let is_fullscreen = ui.input(|i| i.viewport().fullscreen.unwrap_or(false));
         let is_maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
         if !is_fullscreen && !is_maximized {
@@ -236,6 +244,7 @@ impl eframe::App for QwerkeysApp {
                                     ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
                                     self.render_piano(ui);
                                     self.render_qwerty_keyboard(ui);
+                                    ui.add_space(2.0);
                                 },
                             );
                             if extra_margin > 0.0 {

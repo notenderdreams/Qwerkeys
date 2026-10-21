@@ -26,7 +26,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     if args.iter().any(|a| a == "--list" || a == "-l") {
         println!("Connected Keyboards:");
         for k in &keyboards {
-            let kind = if k.is_internal { "Built-in" } else { "External" };
+            let kind = if k.is_internal {
+                "Built-in"
+            } else {
+                "External"
+            };
             println!(
                 "  [{}] {:<32} ({}) [{}]",
                 k.index, k.name, k.transport, kind
@@ -46,7 +50,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             if let Ok(idx) = target.parse::<usize>() {
                 keyboards.iter().find(|k| k.index == idx)
             } else {
-                keyboards.iter().find(|k| k.name.to_lowercase().contains(&target.to_lowercase()))
+                keyboards
+                    .iter()
+                    .find(|k| k.name.to_lowercase().contains(&target.to_lowercase()))
             }
         } else {
             None
@@ -112,8 +118,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Run native macOS GUI on main thread
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1160.0, 740.0])
-            .with_min_inner_size([1040.0, 663.4])
+            .with_inner_size([1160.0, 760.0])
+            .with_min_inner_size([1040.0, 699.3])
             .with_title("Qwerkeys"),
         ..Default::default()
     };
@@ -145,7 +151,7 @@ extern "C" fn sigint_handler(_: c_int) {
 
 fn setup_signal_handler() {
     unsafe {
-        signal(2, sigint_handler);  // SIGINT
+        signal(2, sigint_handler); // SIGINT
         signal(15, sigint_handler); // SIGTERM
     }
     let _ = std::panic::take_hook();
