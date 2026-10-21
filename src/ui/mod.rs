@@ -23,6 +23,7 @@ pub struct QwerkeysApp {
     pub(super) current_theme: AppTheme,
     pub(super) theme_colors: ThemeColors,
     pub(super) settings_open: bool,
+    pub(super) settings_icon_rot: f32,
 }
 
 #[cfg(target_os = "macos")]
@@ -102,6 +103,11 @@ impl QwerkeysApp {
         midi: Arc<MidiEngine>,
     ) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
+
+        // Register the Phosphor icon font (used by the settings gear button)
+        let mut fonts = egui::FontDefinitions::default();
+        egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+        cc.egui_ctx.set_fonts(fonts);
         state.set_egui_ctx(cc.egui_ctx.clone());
 
         let current_theme = AppTheme::default();
@@ -126,6 +132,7 @@ impl QwerkeysApp {
             current_theme,
             theme_colors,
             settings_open: false,
+            settings_icon_rot: 0.0,
         }
     }
 

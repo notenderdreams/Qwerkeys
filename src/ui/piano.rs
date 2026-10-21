@@ -162,7 +162,7 @@ impl QwerkeysApp {
                                 if skin.LIGHT {
                                     theme.PIANO_WHITE_MAPPED_TXT
                                 } else {
-                                    mix(theme.SAGE_ACCENT, Color32::WHITE, 0.45)
+                                    mix(theme.SAGE_ACCENT, Color32::WHITE, 0.65)
                                 }
                             } else {
                                 skin.TEXT_SOFT
@@ -177,25 +177,27 @@ impl QwerkeysApp {
                         }
 
                         // Note name at bottom: C notes show octave (e.g. C2, C3); others show pitch
+                        // Mapped keys always label; unmapped ones follow the settings toggle
                         let note_label = if is_c {
                             format!("{pitch_str}{note_octave}")
                         } else {
                             pitch_str.to_string()
                         };
-
-                        painter.text(
-                            key_rect.center_bottom() - vec2(0.0, 6.0),
-                            Align2::CENTER_BOTTOM,
-                            note_label,
-                            FontId::monospace(if is_c { 9.0 } else { 8.0 }),
-                            if is_active {
-                                Color32::WHITE
-                            } else if skin.LIGHT {
-                                mix(theme.SAGE_ACCENT, Color32::BLACK, 0.45)
-                            } else {
-                                mix(theme.SAGE_ACCENT, Color32::WHITE, 0.50)
-                            },
-                        );
+                        if in_scale || self.state.get_show_unmapped_note_names() {
+                            painter.text(
+                                key_rect.center_bottom() - vec2(0.0, 6.0),
+                                Align2::CENTER_BOTTOM,
+                                note_label,
+                                FontId::monospace(if is_c { 9.0 } else { 8.0 }),
+                                if is_active {
+                                    Color32::WHITE
+                                } else if skin.LIGHT {
+                                    mix(theme.SAGE_ACCENT, Color32::BLACK, 0.45)
+                                } else {
+                                    mix(theme.SAGE_ACCENT, Color32::WHITE, 0.72)
+                                },
+                            );
+                        }
                     }
 
                     // 2. Draw black keys
@@ -290,20 +292,22 @@ impl QwerkeysApp {
                                 );
                             }
 
-                            // Note name at bottom of black key
-                            painter.text(
-                                bk_rect.center_bottom() - vec2(0.0, 5.0),
-                                Align2::CENTER_BOTTOM,
-                                pitch_str,
-                                FontId::monospace(7.0),
-                                if is_active {
-                                    Color32::WHITE
-                                } else if in_scale {
-                                    theme.PIANO_BLACK_IN_SCALE_TXT
-                                } else {
-                                    theme.PIANO_BLACK_OUT_SCALE_TXT
-                                },
-                            );
+                            // Note name at bottom of black key (unmapped follows settings toggle)
+                            if in_scale || self.state.get_show_unmapped_note_names() {
+                                painter.text(
+                                    bk_rect.center_bottom() - vec2(0.0, 5.0),
+                                    Align2::CENTER_BOTTOM,
+                                    pitch_str,
+                                    FontId::monospace(7.0),
+                                    if is_active {
+                                        Color32::WHITE
+                                    } else if in_scale {
+                                        theme.PIANO_BLACK_IN_SCALE_TXT
+                                    } else {
+                                        theme.PIANO_BLACK_OUT_SCALE_TXT
+                                    },
+                                );
+                            }
                         }
                     }
 

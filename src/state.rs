@@ -16,6 +16,7 @@ pub struct AppState {
     pub right_base_octave: AtomicI8,
     pub velocity: AtomicU8,
     pub sustain_held: AtomicBool,
+    pub show_unmapped_note_names: AtomicBool,
 
     pub devices: Mutex<Vec<KeyboardDevice>>,
     pub selected_device_ptr: AtomicUsize,
@@ -40,6 +41,7 @@ impl AppState {
             right_base_octave: AtomicI8::new(5),
             velocity: AtomicU8::new(100),
             sustain_held: AtomicBool::new(false),
+            show_unmapped_note_names: AtomicBool::new(true),
 
             devices: Mutex::new(Vec::new()),
             selected_device_ptr: AtomicUsize::new(0),
@@ -105,6 +107,15 @@ impl AppState {
     pub fn set_mapping_padding(&self, pad: i8) {
         let clamped = pad.clamp(-7, 7);
         self.mapping_padding.store(clamped, Ordering::SeqCst);
+        self.request_repaint();
+    }
+
+    pub fn get_show_unmapped_note_names(&self) -> bool {
+        self.show_unmapped_note_names.load(Ordering::SeqCst)
+    }
+
+    pub fn set_show_unmapped_note_names(&self, show: bool) {
+        self.show_unmapped_note_names.store(show, Ordering::SeqCst);
         self.request_repaint();
     }
 
