@@ -45,13 +45,9 @@ impl QwerkeysApp {
                         .color(theme.TEXT_PRIMARY),
                 );
                 ui.label(
-                    RichText::new(format!(
-                        "(Register: C{} – C{})",
-                        min_oct,
-                        min_oct + num_octaves as i8
-                    ))
-                    .font(FontId::monospace(9.5))
-                    .color(theme.TEXT_MUTED),
+                    RichText::new(format!("(C{} – C{})", min_oct, min_oct + num_octaves as i8))
+                        .font(FontId::monospace(9.5))
+                        .color(theme.TEXT_MUTED),
                 );
             });
 
@@ -96,8 +92,7 @@ impl QwerkeysApp {
                         let oct_idx = k / 7;
                         let step_idx = k % 7;
                         let oct = min_oct + oct_idx as i8;
-                        let note = ((oct + 1) as i16 * 12
-                            + white_semitones[step_idx] as i16)
+                        let note = ((oct + 1) as i16 * 12 + white_semitones[step_idx] as i16)
                             .clamp(0, 127) as u8;
 
                         let x0 = rect.min.x + (k as f32) * wk_w;
@@ -127,20 +122,29 @@ impl QwerkeysApp {
                         } else if in_scale {
                             // Mapped: clearly lighter neutral face, plain border
                             (
-                                mix(skin.FACE, Color32::WHITE, if skin.LIGHT { 0.45 } else { 0.35 }),
+                                mix(
+                                    skin.FACE,
+                                    Color32::WHITE,
+                                    if skin.LIGHT { 0.45 } else { 0.35 },
+                                ),
                                 skin.BORDER,
                             )
                         } else {
                             // Unmapped: darker than the caps, neutral border
                             (
-                                mix(skin.FACE, Color32::BLACK, if skin.LIGHT { 0.08 } else { 0.14 }),
+                                mix(
+                                    skin.FACE,
+                                    Color32::BLACK,
+                                    if skin.LIGHT { 0.08 } else { 0.14 },
+                                ),
                                 skin.BORDER,
                             )
                         };
 
                         // Depressed (playing) keys lose their bevel and sit flush
-                        draw_mac_keycap(&skin,
-            painter,
+                        draw_mac_keycap(
+                            &skin,
+                            painter,
                             key_rect,
                             piano_corner,
                             fill,
@@ -216,10 +220,8 @@ impl QwerkeysApp {
                                 ((oct + 1) as i16 * 12 + semitone as i16).clamp(0, 127) as u8;
 
                             let bk_x = rect.min.x + (wk_index + 1) as f32 * wk_w - bk_w * 0.5;
-                            let bk_rect = Rect::from_min_size(
-                                Pos2::new(bk_x, rect.min.y),
-                                vec2(bk_w, bk_h),
-                            );
+                            let bk_rect =
+                                Rect::from_min_size(Pos2::new(bk_x, rect.min.y), vec2(bk_w, bk_h));
 
                             if let Some(pos) = pointer_pos
                                 && bk_rect.contains(pos)
@@ -244,7 +246,14 @@ impl QwerkeysApp {
                                 bk_rect,
                                 piano_corner,
                                 fill,
-                                Stroke::new(0.75, Color32::from_rgb(0x0E, 0x0F, 0x11)),
+                                Stroke::new(
+                                    0.75,
+                                    if skin.LIGHT {
+                                        Color32::from_rgb(0x22, 0x25, 0x2A)
+                                    } else {
+                                        Color32::from_rgb(0x0E, 0x0F, 0x11)
+                                    },
+                                ),
                                 egui::StrokeKind::Inside,
                             );
 
@@ -274,8 +283,7 @@ impl QwerkeysApp {
                             let pitch_str = note_names[pitch_idx];
 
                             // If mapped, show key binding letter on black key
-                            if let Some(lbl) =
-                                note_to_key_labels.get(&note).and_then(|l| l.first())
+                            if let Some(lbl) = note_to_key_labels.get(&note).and_then(|l| l.first())
                             {
                                 let label_pos = bk_rect.center_bottom() - vec2(0.0, 22.0);
                                 let txt_color = if is_active {
@@ -338,7 +346,11 @@ impl QwerkeysApp {
                     ui.painter().rect(
                         rect,
                         CornerRadius::same(2),
-                        mix(skin.FACE, Color32::WHITE, if skin.LIGHT { 0.45 } else { 0.35 }),
+                        mix(
+                            skin.FACE,
+                            Color32::WHITE,
+                            if skin.LIGHT { 0.45 } else { 0.35 },
+                        ),
                         Stroke::new(1.0, skin.BORDER),
                         egui::StrokeKind::Inside,
                     );

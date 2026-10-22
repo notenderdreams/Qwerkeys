@@ -34,18 +34,12 @@ impl QwerkeysApp {
         ui.horizontal_top(|ui| {
             // Column 0: Logo
             ui.allocate_ui_with_layout(vec2(logo_w, 114.0), Layout::top_down(Align::Center), |ui| {
-                ui.add_space(34.0);
-                let logo_scale = (logo_w / 96.0).clamp(1.35, 1.9);
+                ui.add_space(20.0);
+                let logo_scale = (logo_w / 96.0) * 4.0;
                 ui.add(
                     egui::Image::new(egui::include_image!("../../assets/logo.svg"))
                         .fit_to_exact_size(vec2(67.0 * logo_scale, 16.0 * logo_scale))
-                        .tint(theme.TEXT_PRIMARY),
-                );
-                ui.add_space(4.0);
-                ui.label(
-                    RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
-                        .font(FontId::monospace(8.5))
-                        .color(theme.TEXT_MUTED),
+                        .tint(theme.LOGO),
                 );
             });
 

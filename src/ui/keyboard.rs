@@ -36,7 +36,7 @@ impl KeySkin {
             BODY: Color32::from_rgb(0xD7, 0xDA, 0xDD),
             FACE: Color32::from_rgb(0xEF, 0xF0, 0xF2),
             FACE_HOVER: Color32::from_rgb(0xE4, 0xE6, 0xE8),
-            FACE_DARK: Color32::from_rgb(0x1B, 0x1D, 0x21),
+            FACE_DARK: Color32::from_rgb(0x34, 0x37, 0x3E),
             BORDER: Color32::from_rgb(0xAE, 0xB1, 0xB4),
             BEVEL_MID: Color32::from_rgb(0xC6, 0xC9, 0xCC),
             BEVEL_DEEP: Color32::from_rgb(0x9A, 0x9D, 0x9F),
