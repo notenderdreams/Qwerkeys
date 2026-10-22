@@ -35,6 +35,17 @@
 
 ![Qwerkeys preview](assets/preview.png)
 
+## Installation
+
+Download the latest prebuilt DMG from the [**releases page**](https://github.com/notenderdreams/qwerkeys/releases/latest):
+
+1. Open the DMG and drag **Qwerkeys** into the **Applications** folder
+2. First launch: right-click the app → **Open** (it's not notarized, so macOS may warn about an unidentified developer)
+3. Grant the **Input Monitoring** and/or **Accessibility** permission when macOS asks — Qwerkeys needs to read global keystrokes
+4. Select **`qwerkeys-input`** as a MIDI input in your DAW and play
+
+Requires macOS 11 or later (Apple Silicon).
+
 ## How it works
 
 Qwerkeys sits between your keyboard and your DAW:
@@ -58,9 +69,11 @@ Since the layout is positional, muscle memory is stable: if you remember which k
 
 A 7-note scale doesn't fit evenly into a 12-note chromatic keyboard, so a naive "one key = one semitone step" mapping would frequently hit notes outside the scale. Qwerkeys skips out-of-scale notes entirely: each key advances to the next note *that actually exists in the selected scale*. The trade-off is that a physical key's pitch jumps by variable intervals (a whole step on the next key, then a minor third after the 7th degree), but the benefit is big: no wasted keys, every single key stays in tune, and you cover far more octaves and range with the same rows of keys.
 
-## Quick start
 
-Requires macOS and [Rust](https://rustup.rs).
+
+## Development
+
+Clone and run from source. Requires macOS and [Rust](https://rustup.rs).
 
 ```bash
 git clone https://github.com/notenderdreams/qwerkeys.git
@@ -68,6 +81,10 @@ cd qwerkeys
 cargo run --release
 ```
 
-Then select **`qwerkeys-input`** as a MIDI input in your DAW and start playing.
+Useful during development:
 
-> **Note:** macOS will likely ask for Input Monitoring / Accessibility permission the first time you run Qwerkeys, since it needs to read global keystrokes. <!-- confirm the exact permissions required -->
+```bash
+cargo build --release          # optimized build → target/release/qwerkeys
+cargo test                     # unit tests
+scripts/bundle.sh v0.0.0-dev   # build a local .app + DMG for testing
+```
