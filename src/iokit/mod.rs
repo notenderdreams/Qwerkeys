@@ -8,15 +8,15 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use core_foundation::base::TCFType;
-use core_foundation::runloop::{kCFRunLoopDefaultMode, CFRunLoop};
+use core_foundation::runloop::{CFRunLoop, kCFRunLoopDefaultMode};
 use core_graphics::event::{
     CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType,
     CallbackResult, EventField,
 };
 
+use crate::mapping::hid_usage_to_mac_keycode;
 pub use device::*;
 use ffi::*;
-use crate::mapping::hid_usage_to_mac_keycode;
 
 type KeyHandler = Box<dyn Fn(u32, bool) + Send + Sync + 'static>;
 
@@ -57,7 +57,10 @@ pub fn set_target_mode(mode: DeviceTargetMode) {
 
 #[allow(dead_code)]
 pub fn get_target_mode() -> DeviceTargetMode {
-    TARGET_MODE.lock().map(|m| m.clone()).unwrap_or(DeviceTargetMode::Omni)
+    TARGET_MODE
+        .lock()
+        .map(|m| m.clone())
+        .unwrap_or(DeviceTargetMode::Omni)
 }
 
 #[allow(dead_code)]
@@ -148,7 +151,8 @@ impl HidSystem {
                     CGEventTapOptions::Default,
                     vec![CGEventType::KeyDown, CGEventType::KeyUp],
                     |_proxy, event_type, event| {
-                        let keycode = event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE);
+                        let keycode =
+                            event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE);
                         if let Some(swallow) = SWALLOW_KEYCODES.get()
                             && let Ok(mut set) = swallow.lock()
                         {
@@ -233,7 +237,8 @@ extern "C" fn hid_input_callback(
 
             let vid_match = vid.is_some() && *vid == info.vendor_id && *pid == info.product_id;
             let name_match = !name.is_empty()
-                && (info.name.eq_ignore_ascii_case(name) || info.name.to_lowercase().contains(&name.to_lowercase()));
+                && (info.name.eq_ignore_ascii_case(name)
+                    || info.name.to_lowercase().contains(&name.to_lowercase()));
             vid_match || name_match
         }
     };

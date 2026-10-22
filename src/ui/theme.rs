@@ -2,47 +2,43 @@ use egui::Color32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AppTheme {
-    StudioDaylight,
+    Daylight,
     #[default]
-    StudioSlate,
-    StudioSage,
+    Slate,
+    Sage,
 }
 
 impl AppTheme {
-    pub const ALL: [AppTheme; 3] = [
-        AppTheme::StudioSlate,
-        AppTheme::StudioSage,
-        AppTheme::StudioDaylight,
-    ];
+    pub const ALL: [AppTheme; 3] = [AppTheme::Slate, AppTheme::Sage, AppTheme::Daylight];
 
     pub fn name(&self) -> &'static str {
         match self {
-            AppTheme::StudioDaylight => "Studio Daylight",
-            AppTheme::StudioSlate => "Studio Slate",
-            AppTheme::StudioSage => "Studio Sage",
+            AppTheme::Daylight => "Studio Daylight",
+            AppTheme::Slate => "Studio Slate",
+            AppTheme::Sage => "Studio Sage",
         }
     }
 
     pub fn description(&self) -> &'static str {
         match self {
-            AppTheme::StudioDaylight => "Bright silver aluminum with slate-blue accents",
-            AppTheme::StudioSlate => "Refined dark graphite with slate-blue accents",
-            AppTheme::StudioSage => "Warm dark studio with organic sage green accents",
+            AppTheme::Daylight => "Bright silver aluminum with slate-blue accents",
+            AppTheme::Slate => "Refined dark graphite with slate-blue accents",
+            AppTheme::Sage => "Warm dark studio with organic sage green accents",
         }
     }
 
     /// Light themes need egui's light base visuals (menus, sliders, etc.)
     pub fn is_light(&self) -> bool {
-        matches!(self, AppTheme::StudioDaylight)
+        matches!(self, AppTheme::Daylight)
     }
 }
 
 impl AppTheme {
     pub fn colors(&self) -> ThemeColors {
         match self {
-            AppTheme::StudioDaylight => ThemeColors::studio_daylight(),
-            AppTheme::StudioSlate => ThemeColors::studio_slate(),
-            AppTheme::StudioSage => ThemeColors::studio_sage(),
+            AppTheme::Daylight => ThemeColors::studio_daylight(),
+            AppTheme::Slate => ThemeColors::studio_slate(),
+            AppTheme::Sage => ThemeColors::studio_sage(),
         }
     }
 }

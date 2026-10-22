@@ -3,11 +3,19 @@ use egui::{
     Sense, Stroke, Ui, vec2,
 };
 
-use super::{AppTheme, QwerkeysApp};
 use super::keyboard::mix;
+use super::{AppTheme, QwerkeysApp};
 
 /// Draws an iOS-style toggle switch, animating toward `checked` (0 = off, 1 = on).
-fn render_toggle(ui: &mut Ui, id: egui::Id, rect: Rect, checked: bool, on_fill: Color32, off_fill: Color32, border: Color32) {
+fn render_toggle(
+    ui: &mut Ui,
+    id: egui::Id,
+    rect: Rect,
+    checked: bool,
+    on_fill: Color32,
+    off_fill: Color32,
+    border: Color32,
+) {
     let painter = ui.painter();
     let t = ui
         .ctx()
@@ -23,10 +31,7 @@ fn render_toggle(ui: &mut Ui, id: egui::Id, rect: Rect, checked: bool, on_fill: 
     );
 
     let knob_r = rect.height() * 0.5 - 2.0;
-    let knob_x = egui::lerp(
-        (rect.min.x + knob_r + 2.0)..=(rect.max.x - knob_r - 2.0),
-        t,
-    );
+    let knob_x = egui::lerp((rect.min.x + knob_r + 2.0)..=(rect.max.x - knob_r - 2.0), t);
     let knob_pos = Pos2::new(knob_x, rect.center().y);
     painter.circle_filled(knob_pos, knob_r, Color32::WHITE);
     painter.circle_stroke(knob_pos, knob_r, Stroke::new(0.4, border));
@@ -222,8 +227,7 @@ impl QwerkeysApp {
 
             let avail_w = ui.available_width();
             let row_h = 54.0;
-            let (row_rect, row_resp) =
-                ui.allocate_exact_size(vec2(avail_w, row_h), Sense::click());
+            let (row_rect, row_resp) = ui.allocate_exact_size(vec2(avail_w, row_h), Sense::click());
             let row_resp = row_resp.on_hover_cursor(egui::CursorIcon::PointingHand);
             let row_hovered = row_resp.hovered();
 
@@ -250,7 +254,11 @@ impl QwerkeysApp {
                 Align2::LEFT_CENTER,
                 "Note names on unmapped keys",
                 FontId::proportional(12.5),
-                if row_hovered { theme.TEXT_PRIMARY } else { theme.TEXT_SECONDARY },
+                if row_hovered {
+                    theme.TEXT_PRIMARY
+                } else {
+                    theme.TEXT_SECONDARY
+                },
             );
             painter.text(
                 Pos2::new(row_rect.min.x + 14.0, row_rect.center().y + 8.5),

@@ -2,7 +2,7 @@ use std::error::Error;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
-use midir::{os::unix::VirtualOutput, MidiOutput, MidiOutputConnection};
+use midir::{MidiOutput, MidiOutputConnection, os::unix::VirtualOutput};
 
 use crate::mapping::{calculate_key_notes, find_key_by_usage};
 use crate::scale::format_midi_note;
@@ -160,7 +160,7 @@ impl MidiEngine {
         // Send All Notes Off, All Sound Off, and Sustain Off
         self.send_cc(123, 0); // All Notes Off
         self.send_cc(120, 0); // All Sound Off
-        self.send_cc(64, 0);  // Sustain Off
+        self.send_cc(64, 0); // Sustain Off
         self.state.sustain_held.store(false, Ordering::SeqCst);
 
         // Send explicit Note Off for all 128 MIDI notes

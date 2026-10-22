@@ -1,6 +1,6 @@
-use std::ffi::{c_int, c_void};
 use core_foundation::base::CFIndex;
 use core_foundation::string::CFStringRef;
+use std::ffi::{c_int, c_void};
 
 #[repr(C)]
 pub struct __IOHIDManager(c_void);
@@ -75,9 +75,6 @@ unsafe extern "C" {
     pub fn CFRetain(cf: *const c_void) -> *const c_void;
     pub fn CFRelease(cf: *const c_void);
 
-    pub fn CFNumberGetValue(
-        number: *const c_void,
-        the_type: c_int,
-        value_ptr: *mut c_void,
-    ) -> bool;
+    pub fn CFNumberGetValue(number: *const c_void, the_type: c_int, value_ptr: *mut c_void)
+    -> bool;
 }

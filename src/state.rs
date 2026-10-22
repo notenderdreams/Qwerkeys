@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, AtomicI8, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicI8, AtomicU8, AtomicUsize, Ordering};
 
 use crate::iokit::KeyboardDevice;
 use crate::mapping::LayoutPreset;

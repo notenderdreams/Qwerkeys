@@ -114,7 +114,13 @@ pub(super) fn draw_mac_keycap(
         );
     }
 
-    painter.rect(rect, corner, face, Stroke::new(0.75, border), egui::StrokeKind::Inside);
+    painter.rect(
+        rect,
+        corner,
+        face,
+        Stroke::new(0.75, border),
+        egui::StrokeKind::Inside,
+    );
 
     // Inset glow: `inset 1px 0 25px #dfdfdf`
     // Light aluminum caps get the full glossy sheen; dark keys get a barely-there hint.
@@ -126,8 +132,20 @@ pub(super) fn draw_mac_keycap(
     let band_corner = CornerRadius::same(4);
     let band1 = Rect::from_min_max(inner.min, inner.min + vec2(wide, inner.height() * 0.28));
     let band2 = Rect::from_min_max(band1.max, inner.min + vec2(wide, inner.height() * 0.55));
-    painter.rect(band1, band_corner, sheen_strong, Stroke::NONE, egui::StrokeKind::Inside);
-    painter.rect(band2, band_corner, sheen_soft, Stroke::NONE, egui::StrokeKind::Inside);
+    painter.rect(
+        band1,
+        band_corner,
+        sheen_strong,
+        Stroke::NONE,
+        egui::StrokeKind::Inside,
+    );
+    painter.rect(
+        band2,
+        band_corner,
+        sheen_soft,
+        Stroke::NONE,
+        egui::StrokeKind::Inside,
+    );
 }
 
 enum QwertyKeyDef {
@@ -596,11 +614,21 @@ impl QwerkeysApp {
         }
 
         let painter = ui.painter();
-        draw_mac_keycap(&skin,
-            painter, rect, KEYCAP_CORNER, fill, border, is_triggered);
+        draw_mac_keycap(
+            &skin,
+            painter,
+            rect,
+            KEYCAP_CORNER,
+            fill,
+            border,
+            is_triggered,
+        );
 
         let (label_color, soft_color) = if is_triggered {
-            (theme.KEY_LABEL_KEY_TRIGGERED, theme.KEY_LABEL_SHIFT_TRIGGERED)
+            (
+                theme.KEY_LABEL_KEY_TRIGGERED,
+                theme.KEY_LABEL_SHIFT_TRIGGERED,
+            )
         } else {
             (skin.TEXT, skin.TEXT_SOFT)
         };
@@ -653,10 +681,18 @@ impl QwerkeysApp {
             theme.KEY_ACTIVE_TXT
         } else if skin.LIGHT {
             // readable dark accent on light caps
-            mix(theme.SAGE_ACCENT, Color32::BLACK, if is_root { 0.62 } else { 0.45 })
+            mix(
+                theme.SAGE_ACCENT,
+                Color32::BLACK,
+                if is_root { 0.62 } else { 0.45 },
+            )
         } else {
             // readable light accent on charcoal caps
-            mix(theme.SAGE_ACCENT, Color32::WHITE, if is_root { 0.70 } else { 0.50 })
+            mix(
+                theme.SAGE_ACCENT,
+                Color32::WHITE,
+                if is_root { 0.70 } else { 0.50 },
+            )
         };
         painter.text(
             rect.center() + vec2(0.0, -1.0),
@@ -698,7 +734,8 @@ impl QwerkeysApp {
         let painter = ui.painter();
         let hovered = response.hovered();
 
-        draw_mac_keycap(&skin,
+        draw_mac_keycap(
+            &skin,
             painter,
             rect,
             KEYCAP_CORNER,
@@ -820,8 +857,15 @@ impl QwerkeysApp {
         }
 
         let painter = ui.painter();
-        draw_mac_keycap(&skin,
-            painter, rect, KEYCAP_CORNER, fill, stroke, is_sustain);
+        draw_mac_keycap(
+            &skin,
+            painter,
+            rect,
+            KEYCAP_CORNER,
+            fill,
+            stroke,
+            is_sustain,
+        );
 
         let label = if is_sustain {
             "SUSTAIN ON (CC 64) — ALL NOTES HELD"
@@ -926,7 +970,8 @@ impl QwerkeysApp {
         hovered: bool,
     ) {
         let skin = KeySkin::from_light(self.current_theme.is_light());
-        draw_mac_keycap(&skin,
+        draw_mac_keycap(
+            &skin,
             painter,
             rect,
             KEYCAP_CORNER,

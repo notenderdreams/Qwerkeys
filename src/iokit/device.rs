@@ -86,8 +86,10 @@ pub fn enumerate_keyboards(mgr: IOHIDManagerRef) -> Vec<KeyboardDevice> {
             let usage_page = get_u32_property(dev, "PrimaryUsagePage").unwrap_or(0);
             let usage = get_u32_property(dev, "PrimaryUsage").unwrap_or(0);
 
-            let is_keyboard = (usage_page == HID_USAGE_PAGE_GENERIC_DESKTOP && usage == HID_USAGE_GENERIC_DESKTOP_KEYBOARD)
-                || (usage_page == HID_USAGE_PAGE_KEYBOARD_OR_KEYPAD && usage == HID_USAGE_GENERIC_DESKTOP_KEYBOARD);
+            let is_keyboard = (usage_page == HID_USAGE_PAGE_GENERIC_DESKTOP
+                && usage == HID_USAGE_GENERIC_DESKTOP_KEYBOARD)
+                || (usage_page == HID_USAGE_PAGE_KEYBOARD_OR_KEYPAD
+                    && usage == HID_USAGE_GENERIC_DESKTOP_KEYBOARD);
 
             if !is_keyboard {
                 continue;
@@ -140,8 +142,6 @@ pub fn enumerate_keyboards(mgr: IOHIDManagerRef) -> Vec<KeyboardDevice> {
 
     result
 }
-
-
 
 pub fn get_string_property(device: IOHIDDeviceRef, key_name: &str) -> String {
     let cf_key = CFString::new(key_name);

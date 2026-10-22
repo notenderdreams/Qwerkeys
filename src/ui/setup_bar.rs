@@ -8,8 +8,8 @@ use crate::iokit::{self, DeviceTargetMode, KeyboardDevice};
 use crate::mapping::LayoutPreset;
 use crate::scale::{RootNote, ScaleType};
 
-use super::keyboard::mix;
 use super::QwerkeysApp;
+use super::keyboard::mix;
 
 impl QwerkeysApp {
     pub(super) fn render_setup_bar(&mut self, ui: &mut Ui) {
@@ -33,15 +33,19 @@ impl QwerkeysApp {
         ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
         ui.horizontal_top(|ui| {
             // Column 0: Logo
-            ui.allocate_ui_with_layout(vec2(logo_w, 114.0), Layout::top_down(Align::Center), |ui| {
-                ui.add_space(20.0);
-                let logo_scale = (logo_w / 96.0) * 4.0;
-                ui.add(
-                    egui::Image::new(egui::include_image!("../../assets/logo.svg"))
-                        .fit_to_exact_size(vec2(67.0 * logo_scale, 16.0 * logo_scale))
-                        .tint(theme.LOGO),
-                );
-            });
+            ui.allocate_ui_with_layout(
+                vec2(logo_w, 114.0),
+                Layout::top_down(Align::Center),
+                |ui| {
+                    ui.add_space(20.0);
+                    let logo_scale = (logo_w / 96.0) * 4.0;
+                    ui.add(
+                        egui::Image::new(egui::include_image!("../../assets/logo.svg"))
+                            .fit_to_exact_size(vec2(67.0 * logo_scale, 16.0 * logo_scale))
+                            .tint(theme.LOGO),
+                    );
+                },
+            );
 
             ui.add_space(logo_gap);
 
@@ -53,13 +57,18 @@ impl QwerkeysApp {
                 .show(ui, |ui| {
                     ui.horizontal_top(|ui| {
                         // Column 1: Input device & Layout mapping
-                        ui.allocate_ui_with_layout(vec2(dev_w, 102.0), Layout::top_down(Align::Min), |ui| {
-                            ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
-                            self.render_device_column(ui);
-                        });
+                        ui.allocate_ui_with_layout(
+                            vec2(dev_w, 102.0),
+                            Layout::top_down(Align::Min),
+                            |ui| {
+                                ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+                                self.render_device_column(ui);
+                            },
+                        );
 
                         ui.add_space(sep_space);
-                        let (sep_rect, _) = ui.allocate_exact_size(vec2(sep_w, 102.0), Sense::hover());
+                        let (sep_rect, _) =
+                            ui.allocate_exact_size(vec2(sep_w, 102.0), Sense::hover());
                         ui.painter().vline(
                             sep_rect.center().x,
                             sep_rect.y_range(),
@@ -68,13 +77,18 @@ impl QwerkeysApp {
                         ui.add_space(sep_space);
 
                         // Column 2: Scale (Note)
-                        ui.allocate_ui_with_layout(vec2(scale_w, 102.0), Layout::top_down(Align::Min), |ui| {
-                            ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
-                            self.render_scale_column(ui);
-                        });
+                        ui.allocate_ui_with_layout(
+                            vec2(scale_w, 102.0),
+                            Layout::top_down(Align::Min),
+                            |ui| {
+                                ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+                                self.render_scale_column(ui);
+                            },
+                        );
 
                         ui.add_space(sep_space);
-                        let (sep_rect, _) = ui.allocate_exact_size(vec2(sep_w, 102.0), Sense::hover());
+                        let (sep_rect, _) =
+                            ui.allocate_exact_size(vec2(sep_w, 102.0), Sense::hover());
                         ui.painter().vline(
                             sep_rect.center().x,
                             sep_rect.y_range(),
@@ -84,10 +98,14 @@ impl QwerkeysApp {
 
                         // Column 3: Output controls
                         let out_w = ui.available_width().max(230.0);
-                        ui.allocate_ui_with_layout(vec2(out_w, 102.0), Layout::top_down(Align::Min), |ui| {
-                            ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
-                            self.render_output_column(ui);
-                        });
+                        ui.allocate_ui_with_layout(
+                            vec2(out_w, 102.0),
+                            Layout::top_down(Align::Min),
+                            |ui| {
+                                ui.spacing_mut().item_spacing = vec2(4.0, 4.0);
+                                self.render_output_column(ui);
+                            },
+                        );
                     });
                 });
         });
@@ -457,10 +475,18 @@ impl QwerkeysApp {
             if hovered { 1.0 } else { 0.0 },
             0.10,
         );
-        let spin = ctx.animate_value_with_time(ui.id().with("settings_gear_spin"), self.settings_icon_rot, 0.22);
+        let spin = ctx.animate_value_with_time(
+            ui.id().with("settings_gear_spin"),
+            self.settings_icon_rot,
+            0.22,
+        );
 
         let size = 16.0 + 3.0 * hover_t; // scale up on hover
-        let color = mix(theme.TEXT_MUTED, theme.TEXT_PRIMARY, hover_t.max(if self.settings_open { 0.6 } else { 0.0 }));
+        let color = mix(
+            theme.TEXT_MUTED,
+            theme.TEXT_PRIMARY,
+            hover_t.max(if self.settings_open { 0.6 } else { 0.0 }),
+        );
 
         let font = FontId::new(size, egui::FontFamily::Name("phosphor".into()));
         let painter = ui.painter_at(rect.expand(12.0)); // headroom for scale + rotation
@@ -553,9 +579,9 @@ impl QwerkeysApp {
                     ui.spacing_mut().item_spacing = vec2(3.5, 0.0);
 
                     let font_id = FontId::monospace(8.5);
-                    let galley = ui
-                        .painter()
-                        .layout_no_wrap("VEL:".to_string(), font_id, theme.TEXT_MUTED);
+                    let galley =
+                        ui.painter()
+                            .layout_no_wrap("VEL:".to_string(), font_id, theme.TEXT_MUTED);
                     let (label_rect, _) =
                         ui.allocate_exact_size(vec2(galley.size().x, 22.0), Sense::hover());
                     ui.painter().galley(
@@ -622,10 +648,11 @@ impl QwerkeysApp {
                         ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
 
                         if ui
-                            .button(
-                                RichText::new("−")
-                                    .color(if can_dec { theme.TEXT_MUTED } else { theme.BORDER_GRID }),
-                            )
+                            .button(RichText::new("−").color(if can_dec {
+                                theme.TEXT_MUTED
+                            } else {
+                                theme.BORDER_GRID
+                            }))
                             .clicked()
                             && can_dec
                         {
@@ -640,10 +667,11 @@ impl QwerkeysApp {
                         );
 
                         if ui
-                            .button(
-                                RichText::new("+")
-                                    .color(if can_inc { theme.TEXT_MUTED } else { theme.BORDER_GRID }),
-                            )
+                            .button(RichText::new("+").color(if can_inc {
+                                theme.TEXT_MUTED
+                            } else {
+                                theme.BORDER_GRID
+                            }))
                             .clicked()
                             && can_inc
                         {

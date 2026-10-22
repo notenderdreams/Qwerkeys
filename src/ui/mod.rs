@@ -7,7 +7,7 @@ pub mod theme;
 
 use std::sync::Arc;
 
-use egui::{vec2, Align, Frame, Layout, Margin, Stroke};
+use egui::{Align, Frame, Layout, Margin, Stroke, vec2};
 
 use crate::midi::MidiEngine;
 use crate::state::AppState;
@@ -45,7 +45,7 @@ fn try_set_macos_aspect_ratio(width: f64, height: f64) -> bool {
     }
 
     unsafe {
-        let msg_send = dlsym(-2isize as *mut c_void, b"objc_msgSend\0".as_ptr() as *const c_char);
+        let msg_send = dlsym(-2isize as *mut c_void, c"objc_msgSend".as_ptr());
         if msg_send.is_null() {
             return false;
         }
@@ -59,30 +59,30 @@ fn try_set_macos_aspect_ratio(width: f64, height: f64) -> bool {
         let set_size: unsafe extern "C" fn(*mut c_void, *mut c_void, NSSize) =
             std::mem::transmute(msg_send);
 
-        let cls = objc_getClass(b"NSApplication\0".as_ptr() as *const c_char);
+        let cls = objc_getClass(c"NSApplication".as_ptr());
         if cls.is_null() {
             return false;
         }
-        let sel_app = sel_registerName(b"sharedApplication\0".as_ptr() as *const c_char);
+        let sel_app = sel_registerName(c"sharedApplication".as_ptr());
         let app = get_ptr(cls, sel_app);
         if app.is_null() {
             return false;
         }
 
-        let sel_windows = sel_registerName(b"windows\0".as_ptr() as *const c_char);
+        let sel_windows = sel_registerName(c"windows".as_ptr());
         let windows = get_ptr(app, sel_windows);
         if windows.is_null() {
             return false;
         }
 
-        let sel_count = sel_registerName(b"count\0".as_ptr() as *const c_char);
+        let sel_count = sel_registerName(c"count".as_ptr());
         let count = get_usize(windows, sel_count);
         if count == 0 {
             return false;
         }
 
-        let sel_object_at = sel_registerName(b"objectAtIndex:\0".as_ptr() as *const c_char);
-        let sel_set_aspect_ratio = sel_registerName(b"setAspectRatio:\0".as_ptr() as *const c_char);
+        let sel_object_at = sel_registerName(c"objectAtIndex:".as_ptr());
+        let sel_set_aspect_ratio = sel_registerName(c"setAspectRatio:".as_ptr());
 
         let mut applied = false;
         for i in 0..count {
@@ -136,7 +136,6 @@ impl QwerkeysApp {
         }
     }
 
-
     pub(super) fn set_theme(&mut self, theme: AppTheme, ctx: &egui::Context) {
         self.current_theme = theme;
         self.theme_colors = theme.colors();
@@ -150,8 +149,6 @@ impl QwerkeysApp {
         visuals.override_text_color = Some(self.theme_colors.TEXT_SECONDARY);
         ctx.set_visuals(visuals);
     }
-
-
 }
 
 impl eframe::App for QwerkeysApp {
@@ -169,15 +166,19 @@ impl eframe::App for QwerkeysApp {
         let target_ratio = 1160.0 / 780.0;
         let is_fullscreen = ui.input(|i| i.viewport().fullscreen.unwrap_or(false));
         let is_maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
-        if !is_fullscreen && !is_maximized {
-            if let Some(rect) = ui.input(|i| i.viewport().inner_rect) {
-                let size = rect.size();
-                if size.x > 100.0 && size.y > 100.0 {
-                    let cur_ratio = size.x / size.y;
-                    if (cur_ratio - target_ratio).abs() > 0.05 {
-                        let expected_h = (size.x / target_ratio).round();
-                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(vec2(size.x, expected_h)));
-                    }
+        if !is_fullscreen
+            && !is_maximized
+            && let Some(rect) = ui.input(|i| i.viewport().inner_rect)
+        {
+            let size = rect.size();
+            if size.x > 100.0 && size.y > 100.0 {
+                let cur_ratio = size.x / size.y;
+                if (cur_ratio - target_ratio).abs() > 0.05 {
+                    let expected_h = (size.x / target_ratio).round();
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::InnerSize(vec2(
+                            size.x, expected_h,
+                        )));
                 }
             }
         }
@@ -220,9 +221,7 @@ impl eframe::App for QwerkeysApp {
         self.render_settings_window(&ctx);
 
         // 3. Centered workspace between top bar and bottom status bar
-        let panel_frame = Frame::NONE
-            .fill(theme.BG_APP)
-            .inner_margin(Margin::ZERO);
+        let panel_frame = Frame::NONE.fill(theme.BG_APP).inner_margin(Margin::ZERO);
 
         egui::CentralPanel::default()
             .frame(panel_frame)
@@ -232,7 +231,9 @@ impl eframe::App for QwerkeysApp {
 
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
-                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+                    .scroll_bar_visibility(
+                        egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
+                    )
                     .show(ui, |ui| {
                         let avail_w = ui.available_width();
                         let max_w = (avail_w - 2.0 * side_padding).max(600.0);
