@@ -5,6 +5,8 @@ use std::sync::atomic::{AtomicBool, AtomicI8, AtomicU8, AtomicUsize, Ordering};
 use crate::iokit::KeyboardDevice;
 use crate::mapping::LayoutPreset;
 use crate::scale::{RootNote, ScaleType};
+use crate::settings;
+use crate::ui::AppTheme;
 
 pub struct AppState {
     pub root: Mutex<RootNote>,
@@ -17,6 +19,10 @@ pub struct AppState {
     pub velocity: AtomicU8,
     pub sustain_held: AtomicBool,
     pub show_unmapped_note_names: AtomicBool,
+
+    /// Discriminant of the active [`AppTheme`], kept here so settings
+    /// changes can be persisted from a single chokepoint.
+    pub theme_index: AtomicUsize,
 
     pub devices: Mutex<Vec<KeyboardDevice>>,
     pub selected_device_ptr: AtomicUsize,
@@ -31,17 +37,19 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> Self {
+        let s = settings::load();
         Self {
-            root: Mutex::new(RootNote::C),
-            scale: Mutex::new(ScaleType::NaturalMinor),
-            layout_preset: Mutex::new(LayoutPreset::LinearSplit),
-            base_octave: AtomicI8::new(4),
-            mapping_padding: AtomicI8::new(0),
-            left_base_octave: AtomicI8::new(3),
-            right_base_octave: AtomicI8::new(5),
-            velocity: AtomicU8::new(100),
+            root: Mutex::new(s.root),
+            scale: Mutex::new(s.scale),
+            layout_preset: Mutex::new(s.layout_preset),
+            base_octave: AtomicI8::new(s.base_octave),
+            mapping_padding: AtomicI8::new(s.mapping_padding),
+            left_base_octave: AtomicI8::new(s.base_octave - 1),
+            right_base_octave: AtomicI8::new(s.base_octave),
+            velocity: AtomicU8::new(s.velocity),
             sustain_held: AtomicBool::new(false),
-            show_unmapped_note_names: AtomicBool::new(true),
+            show_unmapped_note_names: AtomicBool::new(s.show_unmapped_note_names),
+            theme_index: AtomicUsize::new(s.theme as usize),
 
             devices: Mutex::new(Vec::new()),
             selected_device_ptr: AtomicUsize::new(0),
@@ -69,6 +77,27 @@ impl AppState {
         }
     }
 
+    /// Snapshot the current settings to the config file. Called after every
+    /// user-visible settings change (no autosave/debounce).
+    pub fn persist(&self) {
+        let theme_index = self.theme_index.load(Ordering::SeqCst);
+        let theme = AppTheme::ALL
+            .iter()
+            .copied()
+            .find(|t| *t as usize == theme_index)
+            .unwrap_or_default();
+        settings::save(&settings::Settings {
+            theme,
+            root: self.get_root(),
+            scale: self.get_scale(),
+            layout_preset: self.get_layout_preset(),
+            base_octave: self.base_octave.load(Ordering::SeqCst),
+            mapping_padding: self.mapping_padding.load(Ordering::SeqCst),
+            velocity: self.velocity.load(Ordering::SeqCst),
+            show_unmapped_note_names: self.get_show_unmapped_note_names(),
+        });
+    }
+
     pub fn get_root(&self) -> RootNote {
         *self.root.lock().unwrap()
     }
@@ -76,6 +105,7 @@ impl AppState {
     pub fn set_root(&self, root: RootNote) {
         *self.root.lock().unwrap() = root;
         self.request_repaint();
+        self.persist();
     }
 
     pub fn get_scale(&self) -> ScaleType {
@@ -85,6 +115,7 @@ impl AppState {
     pub fn set_scale(&self, scale: ScaleType) {
         *self.scale.lock().unwrap() = scale;
         self.request_repaint();
+        self.persist();
     }
 
     pub fn get_layout_preset(&self) -> LayoutPreset {
@@ -94,6 +125,7 @@ impl AppState {
     pub fn set_layout_preset(&self, preset: LayoutPreset) {
         *self.layout_preset.lock().unwrap() = preset;
         self.request_repaint();
+        self.persist();
     }
 
     pub fn set_base_octave(&self, oct: i8) {
@@ -102,12 +134,21 @@ impl AppState {
         self.left_base_octave.store(clamped - 1, Ordering::SeqCst);
         self.right_base_octave.store(clamped, Ordering::SeqCst);
         self.request_repaint();
+        self.persist();
     }
 
     pub fn set_mapping_padding(&self, pad: i8) {
         let clamped = pad.clamp(-7, 7);
         self.mapping_padding.store(clamped, Ordering::SeqCst);
         self.request_repaint();
+        self.persist();
+    }
+
+    pub fn set_velocity(&self, vel: u8) {
+        let clamped = vel.clamp(10, 127);
+        self.velocity.store(clamped, Ordering::SeqCst);
+        self.request_repaint();
+        self.persist();
     }
 
     pub fn get_show_unmapped_note_names(&self) -> bool {
@@ -117,6 +158,7 @@ impl AppState {
     pub fn set_show_unmapped_note_names(&self, show: bool) {
         self.show_unmapped_note_names.store(show, Ordering::SeqCst);
         self.request_repaint();
+        self.persist();
     }
 
     #[allow(dead_code)]

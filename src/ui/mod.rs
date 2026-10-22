@@ -6,6 +6,7 @@ pub mod setup_bar;
 pub mod theme;
 
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use egui::{Align, Frame, Layout, Margin, Stroke, vec2};
 
@@ -110,7 +111,12 @@ impl QwerkeysApp {
         cc.egui_ctx.set_fonts(fonts);
         state.set_egui_ctx(cc.egui_ctx.clone());
 
-        let current_theme = AppTheme::default();
+        // Persisted theme (fall back to the default theme if unknown)
+        let current_theme = AppTheme::ALL
+            .iter()
+            .copied()
+            .find(|t| *t as usize == state.theme_index.load(Ordering::SeqCst))
+            .unwrap_or_default();
         let theme_colors = current_theme.colors();
 
         let mut visuals = if current_theme.is_light() {
@@ -148,6 +154,12 @@ impl QwerkeysApp {
         visuals.window_fill = self.theme_colors.BG_APP;
         visuals.override_text_color = Some(self.theme_colors.TEXT_SECONDARY);
         ctx.set_visuals(visuals);
+
+        // Save-on-change: remember the new theme in state, then snapshot settings
+        self.state
+            .theme_index
+            .store(theme as usize, Ordering::SeqCst);
+        self.state.persist();
     }
 }
 

@@ -2,6 +2,7 @@ mod iokit;
 mod mapping;
 mod midi;
 mod scale;
+mod settings;
 mod state;
 mod ui;
 mod utils;

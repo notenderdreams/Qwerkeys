@@ -596,7 +596,7 @@ impl QwerkeysApp {
                     let mut vel = self.state.velocity.load(Ordering::SeqCst);
                     let slider = egui::Slider::new(&mut vel, 10..=127).show_value(true);
                     if ui.add_sized(vec2(175.0, 22.0), slider).changed() {
-                        self.state.velocity.store(vel, Ordering::SeqCst);
+                        self.state.set_velocity(vel);
                     }
                 },
             );
