@@ -1,3 +1,14 @@
+//! Device discovery, enumeration, and property introspection for IOKit keyboards.
+//!
+//! # Overview
+//! This module queries macOS `IOHIDManager` to discover connected input devices, filters
+//! for keyboards based on USB HID specifications, and inspects their hardware properties
+//! (Vendor ID, Product ID, Transport, and Device Name).
+//!
+//! It also implements heuristics to distinguish between internal MacBook keyboards
+//! (connected via proprietary internal buses like SPI/SPU/FIFO) and external keyboards
+//! (connected via standard USB or Bluetooth).
+
 use std::ffi::c_void;
 use std::ptr;
 
@@ -6,6 +17,7 @@ use core_foundation::string::CFString;
 
 use super::ffi::*;
 
+/// Discovered keyboard descriptor for UI display and device selection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyboardDevice {
     pub index: usize,
@@ -18,6 +30,8 @@ pub struct KeyboardDevice {
     pub device_ptr: usize,
 }
 
+/// Lightweight device metadata cached during real-time event processing.
+/// Used to avoid expensive CoreFoundation property lookups on every keystroke.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SenderDeviceInfo {
     pub is_internal: bool,
@@ -26,6 +40,13 @@ pub struct SenderDeviceInfo {
     pub product_id: Option<u32>,
 }
 
+// Device inspection and hardware heuristics:
+// macOS does not provide a single boolean flag for "is built-in keyboard".
+// Multiple IOKit properties are checked:
+// 1. Product/Manufacturer naming conventions (e.g. "Apple Internal Keyboard").
+// 2. Transport bus type: Apple built-in keyboards communicate over internal
+//    protocols like "SPI", "SPU" (Apple Silicon Sensor Processing Unit), or "FIFO",
+//    whereas external devices report "USB" or "Bluetooth".
 pub fn inspect_device(dev: IOHIDDeviceRef) -> SenderDeviceInfo {
     let name = get_string_property(dev, "Product");
     let mfg = get_string_property(dev, "Manufacturer");
@@ -55,6 +76,9 @@ pub fn inspect_device(dev: IOHIDDeviceRef) -> SenderDeviceInfo {
     }
 }
 
+// Keyboard enumeration:
+// Queries active IOHIDManager for all matched devices in its CFSet, filtering
+// for devices declaring keyboard usage pages (0x01 Generic Desktop or 0x07 Keyboard/Keypad).
 pub fn enumerate_keyboards(mgr: IOHIDManagerRef) -> Vec<KeyboardDevice> {
     let mut result = Vec::new();
     if mgr.is_null() {
@@ -143,6 +167,9 @@ pub fn enumerate_keyboards(mgr: IOHIDManagerRef) -> Vec<KeyboardDevice> {
     result
 }
 
+// CoreFoundation property helpers:
+// Safe wrappers around IOHIDDeviceGetProperty bridging CoreFoundation string
+// and numeric types into Rust native types, respecting CF memory ownership rules.
 pub fn get_string_property(device: IOHIDDeviceRef, key_name: &str) -> String {
     let cf_key = CFString::new(key_name);
     unsafe {

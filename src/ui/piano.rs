@@ -9,7 +9,8 @@ use egui::{
 use crate::mapping::{KEY_DEFINITIONS, calculate_key_notes};
 
 use super::QwerkeysApp;
-use super::keyboard::{KeySkin, draw_mac_keycap, mix};
+use super::keyboard::{KeySkin, draw_mac_keycap};
+use crate::utils::mix;
 
 impl QwerkeysApp {
     pub(super) fn render_piano(&mut self, ui: &mut Ui) {

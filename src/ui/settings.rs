@@ -3,8 +3,8 @@ use egui::{
     Sense, Stroke, Ui, vec2,
 };
 
-use super::keyboard::mix;
 use super::{AppTheme, QwerkeysApp};
+use crate::utils::mix;
 
 /// Draws an iOS-style toggle switch, animating toward `checked` (0 = off, 1 = on).
 fn render_toggle(

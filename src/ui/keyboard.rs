@@ -1,3 +1,6 @@
+//! The QWERTY keyboard widget: physical mac layout data, keycap skin and
+//! painting primitives, and the egui rendering + MIDI routing.
+
 use std::sync::atomic::Ordering;
 
 use egui::{
@@ -5,16 +8,15 @@ use egui::{
     vec2,
 };
 
-use crate::mapping::{KeyMappingDef, LayoutPreset, find_key_by_label, get_key_display_info};
-use crate::scale::{RootNote, ScaleType};
+use crate::mapping::{KeyMappingDef, find_key_by_label, get_key_display_info};
 
 use super::QwerkeysApp;
+use crate::utils::mix;
 
-/// Keycap skins for the keyboard widget — light aluminum or charcoal "blackbook",
-/// selected per app theme.
+// Keycap skin + painting primitives
 #[allow(non_snake_case)]
 #[derive(Debug, Clone, Copy)]
-pub(super) struct KeySkin {
+pub struct KeySkin {
     /// enclosure body around the keys
     pub BODY: Color32,
     pub FACE: Color32,
@@ -31,7 +33,7 @@ pub(super) struct KeySkin {
 
 impl KeySkin {
     /// Light aluminum MacBook skin (Studio Daylight)
-    pub(super) fn aluminum() -> Self {
+    pub fn aluminum() -> Self {
         Self {
             BODY: Color32::from_rgb(0xD7, 0xDA, 0xDD),
             FACE: Color32::from_rgb(0xEF, 0xF0, 0xF2),
@@ -47,7 +49,7 @@ impl KeySkin {
     }
 
     /// Dark "blackbook" skin — charcoal caps on a lighter body (dark modes)
-    pub(super) fn carbon() -> Self {
+    pub fn carbon() -> Self {
         Self {
             BODY: Color32::from_rgb(0x3A, 0x3C, 0x40),
             FACE: Color32::from_rgb(0x1C, 0x1D, 0x1F),
@@ -62,7 +64,7 @@ impl KeySkin {
         }
     }
 
-    pub(super) fn from_light(light: bool) -> Self {
+    pub fn from_light(light: bool) -> Self {
         if light {
             Self::aluminum()
         } else {
@@ -71,23 +73,13 @@ impl KeySkin {
     }
 }
 
-pub(super) fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
-    let lerp = |x: f32, y: f32| (x + (y - x) * t) as u8;
-    Color32::from_rgba_unmultiplied(
-        lerp(a.r() as f32, b.r() as f32),
-        lerp(a.g() as f32, b.g() as f32),
-        lerp(a.b() as f32, b.b() as f32),
-        lerp(a.a() as f32, b.a() as f32),
-    )
-}
-
 /// Corner profile used by the QWERTY keycaps.
-pub(super) const KEYCAP_CORNER: CornerRadius = CornerRadius::same(5);
+pub const KEYCAP_CORNER: CornerRadius = CornerRadius::same(5);
 
 /// Paints one mac-style keycap face: stacked drop layers simulate the key's
 /// 3D depth, a soft top sheen stands in for the CSS inner-glow shadow, and
 /// `depressed` (a pressed key) drops the bevel so the cap sits flush.
-pub(super) fn draw_mac_keycap(
+pub fn draw_mac_keycap(
     skin: &KeySkin,
     painter: &egui::Painter,
     rect: Rect,
@@ -148,6 +140,9 @@ pub(super) fn draw_mac_keycap(
     );
 }
 
+// Physical layout table — one "unit" is a standard keycap width, every row
+// of the mac keyboard is 14.5 units wide.
+#[derive(Clone, Copy)]
 enum QwertyKeyDef {
     Playable {
         label: &'static str,
@@ -163,16 +158,305 @@ enum QwertyKeyDef {
     ArrowCluster(f32),
 }
 
+/// Rows of the mac keyboard, top to bottom.
+static ROWS: [&[QwertyKeyDef]; 5] = [
+    // Row 0: Number Row (14.5 units total)
+    &[
+        QwertyKeyDef::Modifier {
+            label: "`",
+            sub: Some("~"),
+            units: 1.0,
+            align_right: false,
+        },
+        QwertyKeyDef::Playable {
+            label: "1",
+            shift_char: Some("!"),
+        },
+        QwertyKeyDef::Playable {
+            label: "2",
+            shift_char: Some("@"),
+        },
+        QwertyKeyDef::Playable {
+            label: "3",
+            shift_char: Some("#"),
+        },
+        QwertyKeyDef::Playable {
+            label: "4",
+            shift_char: Some("$"),
+        },
+        QwertyKeyDef::Playable {
+            label: "5",
+            shift_char: Some("%"),
+        },
+        QwertyKeyDef::Playable {
+            label: "6",
+            shift_char: Some("^"),
+        },
+        QwertyKeyDef::Playable {
+            label: "7",
+            shift_char: Some("&"),
+        },
+        QwertyKeyDef::Playable {
+            label: "8",
+            shift_char: Some("*"),
+        },
+        QwertyKeyDef::Playable {
+            label: "9",
+            shift_char: Some("("),
+        },
+        QwertyKeyDef::Playable {
+            label: "0",
+            shift_char: Some(")"),
+        },
+        QwertyKeyDef::Playable {
+            label: "-",
+            shift_char: Some("_"),
+        },
+        QwertyKeyDef::Playable {
+            label: "=",
+            shift_char: Some("+"),
+        },
+        QwertyKeyDef::Modifier {
+            label: "delete",
+            sub: None,
+            units: 1.5,
+            align_right: true,
+        },
+    ],
+    // Row 1: Top Row (14.5 units total)
+    &[
+        QwertyKeyDef::Modifier {
+            label: "tab",
+            sub: None,
+            units: 1.5,
+            align_right: false,
+        },
+        QwertyKeyDef::Playable {
+            label: "Q",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "W",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "E",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "R",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "T",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "Y",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "U",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "I",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "O",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "P",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "[",
+            shift_char: Some("{"),
+        },
+        QwertyKeyDef::Modifier {
+            label: "]",
+            sub: Some("}"),
+            units: 1.0,
+            align_right: false,
+        },
+        QwertyKeyDef::Modifier {
+            label: "\\",
+            sub: Some("|"),
+            units: 1.0,
+            align_right: false,
+        },
+    ],
+    // Row 2: Home Row (14.5 units total)
+    &[
+        QwertyKeyDef::Modifier {
+            label: "caps lock",
+            sub: Some("•"),
+            units: 1.8,
+            align_right: false,
+        },
+        QwertyKeyDef::Playable {
+            label: "A",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "S",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "D",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "F",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "G",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "H",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "J",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "K",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "L",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: ";",
+            shift_char: Some(":"),
+        },
+        QwertyKeyDef::Modifier {
+            label: "'",
+            sub: Some("\""),
+            units: 1.0,
+            align_right: false,
+        },
+        QwertyKeyDef::Modifier {
+            label: "return",
+            sub: None,
+            units: 1.7,
+            align_right: true,
+        },
+    ],
+    // Row 3: Bottom Row (14.5 units total)
+    &[
+        QwertyKeyDef::Modifier {
+            label: "shift",
+            sub: None,
+            units: 2.3,
+            align_right: false,
+        },
+        QwertyKeyDef::Playable {
+            label: "Z",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "X",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "C",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "V",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "B",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "N",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: "M",
+            shift_char: None,
+        },
+        QwertyKeyDef::Playable {
+            label: ",",
+            shift_char: Some("<"),
+        },
+        QwertyKeyDef::Playable {
+            label: ".",
+            shift_char: Some(">"),
+        },
+        QwertyKeyDef::Modifier {
+            label: "/",
+            sub: Some("?"),
+            units: 1.0,
+            align_right: false,
+        },
+        QwertyKeyDef::Modifier {
+            label: "shift",
+            sub: None,
+            units: 2.2,
+            align_right: true,
+        },
+    ],
+    // Row 4: Spacebar & Modifiers (14.5 units total)
+    &[
+        QwertyKeyDef::Modifier {
+            label: "fn",
+            sub: Some("🌐"),
+            units: 1.0,
+            align_right: false,
+        },
+        QwertyKeyDef::Modifier {
+            label: "control",
+            sub: Some("⌃"),
+            units: 1.0,
+            align_right: false,
+        },
+        QwertyKeyDef::Modifier {
+            label: "option",
+            sub: Some("⌥"),
+            units: 1.0,
+            align_right: false,
+        },
+        QwertyKeyDef::Modifier {
+            label: "command",
+            sub: Some("⌘"),
+            units: 1.25,
+            align_right: false,
+        },
+        QwertyKeyDef::Spacebar(5.0),
+        QwertyKeyDef::Modifier {
+            label: "command",
+            sub: Some("⌘"),
+            units: 1.25,
+            align_right: false,
+        },
+        QwertyKeyDef::Modifier {
+            label: "option",
+            sub: Some("⌥"),
+            units: 1.0,
+            align_right: false,
+        },
+        QwertyKeyDef::ArrowCluster(3.0),
+    ],
+];
+
+// ===========================================================================
+// Rendering + MIDI routing
+// ===========================================================================
+
 impl QwerkeysApp {
     pub(super) fn render_qwerty_keyboard(&mut self, ui: &mut Ui) {
         let theme = self.theme_colors;
         let skin = KeySkin::from_light(self.current_theme.is_light());
-        let root = self.state.get_root();
-        let scale = self.state.get_scale();
-        let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
-        let right_oct = self.state.right_base_octave.load(Ordering::SeqCst);
-        let pad = self.state.mapping_padding.load(Ordering::SeqCst);
-        let preset = self.state.get_layout_preset();
 
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
@@ -192,297 +476,6 @@ impl QwerkeysApp {
                 .corner_radius(CornerRadius::same(10))
                 .inner_margin(Margin::symmetric(12, 10))
                 .show(ui, |ui| {
-                    use QwertyKeyDef::*;
-                    let rows: [&[QwertyKeyDef]; 5] = [
-                        // Row 0: Number Row (14.5 units total)
-                        &[
-                            Modifier {
-                                label: "`",
-                                sub: Some("~"),
-                                units: 1.0,
-                                align_right: false,
-                            },
-                            Playable {
-                                label: "1",
-                                shift_char: Some("!"),
-                            },
-                            Playable {
-                                label: "2",
-                                shift_char: Some("@"),
-                            },
-                            Playable {
-                                label: "3",
-                                shift_char: Some("#"),
-                            },
-                            Playable {
-                                label: "4",
-                                shift_char: Some("$"),
-                            },
-                            Playable {
-                                label: "5",
-                                shift_char: Some("%"),
-                            },
-                            Playable {
-                                label: "6",
-                                shift_char: Some("^"),
-                            },
-                            Playable {
-                                label: "7",
-                                shift_char: Some("&"),
-                            },
-                            Playable {
-                                label: "8",
-                                shift_char: Some("*"),
-                            },
-                            Playable {
-                                label: "9",
-                                shift_char: Some("("),
-                            },
-                            Playable {
-                                label: "0",
-                                shift_char: Some(")"),
-                            },
-                            Playable {
-                                label: "-",
-                                shift_char: Some("_"),
-                            },
-                            Playable {
-                                label: "=",
-                                shift_char: Some("+"),
-                            },
-                            Modifier {
-                                label: "delete",
-                                sub: None,
-                                units: 1.5,
-                                align_right: true,
-                            },
-                        ],
-                        // Row 1: Top Row (14.5 units total)
-                        &[
-                            Modifier {
-                                label: "tab",
-                                sub: None,
-                                units: 1.5,
-                                align_right: false,
-                            },
-                            Playable {
-                                label: "Q",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "W",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "E",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "R",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "T",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "Y",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "U",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "I",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "O",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "P",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "[",
-                                shift_char: Some("{"),
-                            },
-                            Modifier {
-                                label: "]",
-                                sub: Some("}"),
-                                units: 1.0,
-                                align_right: false,
-                            },
-                            Modifier {
-                                label: "\\",
-                                sub: Some("|"),
-                                units: 1.0,
-                                align_right: false,
-                            },
-                        ],
-                        // Row 2: Home Row (14.5 units total)
-                        &[
-                            Modifier {
-                                label: "caps lock",
-                                sub: Some("•"),
-                                units: 1.8,
-                                align_right: false,
-                            },
-                            Playable {
-                                label: "A",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "S",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "D",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "F",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "G",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "H",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "J",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "K",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "L",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: ";",
-                                shift_char: Some(":"),
-                            },
-                            Modifier {
-                                label: "'",
-                                sub: Some("\""),
-                                units: 1.0,
-                                align_right: false,
-                            },
-                            Modifier {
-                                label: "return",
-                                sub: None,
-                                units: 1.7,
-                                align_right: true,
-                            },
-                        ],
-                        // Row 3: Bottom Row (14.5 units total)
-                        &[
-                            Modifier {
-                                label: "shift",
-                                sub: None,
-                                units: 2.3,
-                                align_right: false,
-                            },
-                            Playable {
-                                label: "Z",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "X",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "C",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "V",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "B",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "N",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: "M",
-                                shift_char: None,
-                            },
-                            Playable {
-                                label: ",",
-                                shift_char: Some("<"),
-                            },
-                            Playable {
-                                label: ".",
-                                shift_char: Some(">"),
-                            },
-                            Modifier {
-                                label: "/",
-                                sub: Some("?"),
-                                units: 1.0,
-                                align_right: false,
-                            },
-                            Modifier {
-                                label: "shift",
-                                sub: None,
-                                units: 2.2,
-                                align_right: true,
-                            },
-                        ],
-                        // Row 4: Spacebar & Modifiers (14.5 units total)
-                        &[
-                            Modifier {
-                                label: "fn",
-                                sub: Some("🌐"),
-                                units: 1.0,
-                                align_right: false,
-                            },
-                            Modifier {
-                                label: "control",
-                                sub: Some("⌃"),
-                                units: 1.0,
-                                align_right: false,
-                            },
-                            Modifier {
-                                label: "option",
-                                sub: Some("⌥"),
-                                units: 1.0,
-                                align_right: false,
-                            },
-                            Modifier {
-                                label: "command",
-                                sub: Some("⌘"),
-                                units: 1.25,
-                                align_right: false,
-                            },
-                            Spacebar(5.0),
-                            Modifier {
-                                label: "command",
-                                sub: Some("⌘"),
-                                units: 1.25,
-                                align_right: false,
-                            },
-                            Modifier {
-                                label: "option",
-                                sub: Some("⌥"),
-                                units: 1.0,
-                                align_right: false,
-                            },
-                            ArrowCluster(3.0),
-                        ],
-                    ];
-
                     let total_width = ui.available_width();
                     let key_spacing = 4.0;
                     let unit_u = (total_width + key_spacing) / 14.5;
@@ -490,7 +483,7 @@ impl QwerkeysApp {
 
                     ui.spacing_mut().item_spacing = vec2(key_spacing, key_spacing);
 
-                    for row in rows {
+                    for row in ROWS {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing = vec2(key_spacing, key_spacing);
                             let row_len = row.len();
@@ -498,7 +491,7 @@ impl QwerkeysApp {
                             for (idx, key_def) in row.iter().enumerate() {
                                 let is_last = idx + 1 == row_len;
                                 match key_def {
-                                    Playable { label, shift_char } => {
+                                    QwertyKeyDef::Playable { label, shift_char } => {
                                         let key_w = if is_last {
                                             ui.available_width().max(1.0)
                                         } else {
@@ -511,16 +504,10 @@ impl QwerkeysApp {
                                                 *shift_char,
                                                 key_w,
                                                 row_h,
-                                                root,
-                                                scale,
-                                                left_oct,
-                                                right_oct,
-                                                preset,
-                                                pad,
                                             );
                                         }
                                     }
-                                    Modifier {
+                                    QwertyKeyDef::Modifier {
                                         label,
                                         sub,
                                         units,
@@ -540,7 +527,7 @@ impl QwerkeysApp {
                                             *align_right,
                                         );
                                     }
-                                    Spacebar(units) => {
+                                    QwertyKeyDef::Spacebar(units) => {
                                         let key_w = if is_last {
                                             ui.available_width().max(1.0)
                                         } else {
@@ -548,7 +535,7 @@ impl QwerkeysApp {
                                         };
                                         self.render_spacebar_keycap(ui, key_w, row_h);
                                     }
-                                    ArrowCluster(units) => {
+                                    QwertyKeyDef::ArrowCluster(units) => {
                                         let key_w = if is_last {
                                             ui.available_width().max(1.0)
                                         } else {
@@ -564,7 +551,6 @@ impl QwerkeysApp {
         });
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn render_playable_keycap(
         &mut self,
         ui: &mut Ui,
@@ -572,15 +558,15 @@ impl QwerkeysApp {
         shift_char: Option<&'static str>,
         width: f32,
         height: f32,
-        root: RootNote,
-        scale: ScaleType,
-        left_oct: i8,
-        right_oct: i8,
-        preset: LayoutPreset,
-        padding: i8,
     ) {
         let theme = self.theme_colors;
         let skin = KeySkin::from_light(self.current_theme.is_light());
+        let root = self.state.get_root();
+        let scale = self.state.get_scale();
+        let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
+        let right_oct = self.state.right_base_octave.load(Ordering::SeqCst);
+        let preset = self.state.get_layout_preset();
+        let padding = self.state.mapping_padding.load(Ordering::SeqCst);
         let (note_str, degree, is_root) =
             get_key_display_info(key, root, scale, left_oct, right_oct, preset, padding);
 

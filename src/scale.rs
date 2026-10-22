@@ -122,30 +122,6 @@ impl ScaleType {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn degree_label(&self, degree_index: usize) -> &'static str {
-        let labels: &'static [&'static str] = match self {
-            ScaleType::NaturalMinor => &["Root", "2nd", "m3rd", "4th", "5th", "m6th", "m7th"],
-            ScaleType::Major => &["Root", "2nd", "3rd", "4th", "5th", "6th", "7th"],
-            ScaleType::Dorian => &["Root", "2nd", "m3rd", "4th", "5th", "6th", "m7th"],
-            ScaleType::Phrygian => &["Root", "b2nd", "m3rd", "4th", "5th", "m6th", "m7th"],
-            ScaleType::Lydian => &["Root", "2nd", "3rd", "#4th", "5th", "6th", "7th"],
-            ScaleType::Mixolydian => &["Root", "2nd", "3rd", "4th", "5th", "6th", "m7th"],
-            ScaleType::HarmonicMinor => &["Root", "2nd", "m3rd", "4th", "5th", "m6th", "7th"],
-            ScaleType::MelodicMinor => &["Root", "2nd", "m3rd", "4th", "5th", "6th", "7th"],
-            ScaleType::MinorPentatonic => &["Root", "m3rd", "4th", "5th", "m7th"],
-            ScaleType::MajorPentatonic => &["Root", "2nd", "3rd", "5th", "6th"],
-            ScaleType::Blues => &["Root", "m3rd", "4th", "b5th", "5th", "m7th"],
-            ScaleType::JapaneseHirajoshi => &["Root", "2nd", "m3rd", "5th", "m6th"],
-            ScaleType::ArabicDoubleHarmonic => {
-                &["Root", "b2nd", "3rd", "4th", "5th", "b6th", "7th"]
-            }
-        };
-
-        let step = degree_index % labels.len();
-        labels[step]
-    }
-
     pub fn degree_label_signed(&self, degree: i32) -> &'static str {
         let labels: &'static [&'static str] = match self {
             ScaleType::NaturalMinor => &["Root", "2nd", "m3rd", "4th", "5th", "m6th", "m7th"],
@@ -169,11 +145,6 @@ impl ScaleType {
         labels[step]
     }
 
-    #[allow(dead_code)]
-    pub fn get_midi_note(&self, root: RootNote, base_octave: i8, degree_index: usize) -> u8 {
-        self.get_midi_note_signed(root, base_octave, degree_index as i32)
-    }
-
     pub fn get_midi_note_signed(&self, root: RootNote, base_octave: i8, degree: i32) -> u8 {
         let intervals = self.intervals();
         let num_notes = intervals.len() as i32;
@@ -188,7 +159,6 @@ impl ScaleType {
         note.clamp(0, 127) as u8
     }
 
-    #[allow(dead_code)]
     pub fn is_in_scale(&self, root: RootNote, note: u8) -> bool {
         let pitch_class = (note % 12) as i16;
         let root_class = root.semitone() as i16;
@@ -219,20 +189,20 @@ mod tests {
         let scale = ScaleType::NaturalMinor;
         let root = RootNote::C;
         // Base octave 2: C2 is MIDI 36
-        assert_eq!(scale.get_midi_note(root, 2, 0), 36); // C2 (Root)
+        assert_eq!(scale.get_midi_note_signed(root, 2, 0), 36); // C2 (Root)
         assert_eq!(format_midi_note(36), "C2");
-        assert_eq!(scale.degree_label(0), "Root");
+        assert_eq!(scale.degree_label_signed(0), "Root");
 
-        assert_eq!(scale.get_midi_note(root, 2, 1), 38); // D2 (2nd)
-        assert_eq!(scale.degree_label(1), "2nd");
+        assert_eq!(scale.get_midi_note_signed(root, 2, 1), 38); // D2 (2nd)
+        assert_eq!(scale.degree_label_signed(1), "2nd");
 
-        assert_eq!(scale.get_midi_note(root, 2, 2), 39); // D#2 / Eb2 (m3rd)
-        assert_eq!(scale.degree_label(2), "m3rd");
+        assert_eq!(scale.get_midi_note_signed(root, 2, 2), 39); // D#2 / Eb2 (m3rd)
+        assert_eq!(scale.degree_label_signed(2), "m3rd");
 
         // Degree 7 = octave wrap to C3 (48)
-        assert_eq!(scale.get_midi_note(root, 2, 7), 48);
+        assert_eq!(scale.get_midi_note_signed(root, 2, 7), 48);
         assert_eq!(format_midi_note(48), "C3");
-        assert_eq!(scale.degree_label(7), "Root");
+        assert_eq!(scale.degree_label_signed(7), "Root");
     }
 
     #[test]
@@ -240,10 +210,10 @@ mod tests {
         let scale = ScaleType::MinorPentatonic;
         let root = RootNote::A;
         // A2 is semitone 9, base octave 2 -> (2+1)*12 + 9 = 45 (A2)
-        assert_eq!(scale.get_midi_note(root, 2, 0), 45); // A2
-        assert_eq!(scale.degree_label(0), "Root");
+        assert_eq!(scale.get_midi_note_signed(root, 2, 0), 45); // A2
+        assert_eq!(scale.degree_label_signed(0), "Root");
 
         // Degree 5 = 1 octave wrap -> A3 (57)
-        assert_eq!(scale.get_midi_note(root, 2, 5), 57); // A3
+        assert_eq!(scale.get_midi_note_signed(root, 2, 5), 57); // A3
     }
 }

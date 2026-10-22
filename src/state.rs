@@ -161,30 +161,22 @@ impl AppState {
         self.persist();
     }
 
-    #[allow(dead_code)]
-    pub fn get_selected_device(&self) -> Option<KeyboardDevice> {
-        let ptr = self.selected_device_ptr.load(Ordering::SeqCst);
-        let list = self.devices.lock().unwrap();
-        list.iter().find(|d| d.device_ptr == ptr).cloned()
-    }
-
     pub fn set_selected_device(&self, device_ptr: usize) {
         self.selected_device_ptr.store(device_ptr, Ordering::SeqCst);
         self.request_repaint();
     }
 
-    pub fn is_key_active(&self, usage: u32) -> bool {
-        if let Ok(active) = self.active_usages.lock() {
-            active.contains(&usage)
+    pub fn is_note_active(&self, note: u8) -> bool {
+        if let Ok(notes) = self.active_notes.lock() {
+            notes.contains(&note)
         } else {
             false
         }
     }
 
-    #[allow(dead_code)]
-    pub fn is_note_active(&self, note: u8) -> bool {
-        if let Ok(notes) = self.active_notes.lock() {
-            notes.contains(&note)
+    pub fn is_key_active(&self, usage: u32) -> bool {
+        if let Ok(active) = self.active_usages.lock() {
+            active.contains(&usage)
         } else {
             false
         }

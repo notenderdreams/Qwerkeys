@@ -9,7 +9,7 @@ use crate::mapping::LayoutPreset;
 use crate::scale::{RootNote, ScaleType};
 
 use super::QwerkeysApp;
-use super::keyboard::mix;
+use crate::utils::mix;
 
 impl QwerkeysApp {
     pub(super) fn render_setup_bar(&mut self, ui: &mut Ui) {
