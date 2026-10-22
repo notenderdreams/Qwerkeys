@@ -32,6 +32,11 @@ rm -rf "$APP" dmg-staging
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp packaging/Info.plist "$APP/Contents/Info.plist"
+# Generate the icns from the SVG source, always, so the freshest artwork is
+# bundled (requires rsvg-convert; see generate-icon.sh).
+scripts/generate-icon.sh
+[[ -f "assets/AppIcon.icns" ]] || { echo "error: assets/AppIcon.icns not found — install librsvg ('brew install librsvg') and rerun" >&2; exit 1; }
+cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 /usr/libexec/PlistBuddy \
   -c "Set :CFBundleVersion $VERSION" \
   -c "Set :CFBundleShortVersionString $VERSION" \

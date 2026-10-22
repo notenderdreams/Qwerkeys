@@ -1,1 +1,4 @@
 /target
+
+# Generated at bundle time by scripts/generate-icon.sh (from assets/app-icon.svg)
+assets/AppIcon.icns
