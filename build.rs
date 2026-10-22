@@ -9,7 +9,7 @@ fn main() {
     let png = Path::new(&manifest_dir).join("assets/app-icon.png");
 
     if !png.exists() {
-        let script = Path::new(&manifest_dir).join("scripts/generate-icon.sh");
-        let _ = Command::new("bash").arg(script).status();
+        let script = Path::new(&manifest_dir).join("scripts/generate-icon.swift");
+        let _ = Command::new("swift").arg(script).status();
     }
 }

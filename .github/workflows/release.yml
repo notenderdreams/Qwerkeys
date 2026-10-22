@@ -33,9 +33,6 @@ jobs:
         env:
           MACOSX_DEPLOYMENT_TARGET: "11.0"
 
-      - name: Install librsvg (icon generation)
-        run: brew install librsvg
-
       - name: Bundle DMG
         env:
           TAG: ${{ github.ref_name }}
