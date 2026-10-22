@@ -4,10 +4,10 @@
 # Usage: scripts/generate-icon.sh
 #
 # Requires: rsvg-convert (brew install librsvg) and iconutil (built into macOS).
-# The SVG contains the icon artwork in its left 824x824 square, so the source
-# is cropped to that region before scaling.
 
 set -euo pipefail
+
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 cd "$(dirname "$0")/.."
 
@@ -28,17 +28,13 @@ command -v iconutil >/dev/null 2>&1 || {
 mkdir -p "$IMGDIR"
 trap 'rm -rf "$IMGDIR"' EXIT
 
-# Crop the SVG to the icon region (0,0 - 824,824) by rewriting the viewBox.
-TMP_SVG="packaging/.app-icon-crop.svg"
-trap 'rm -rf "$IMGDIR" "$TMP_SVG"' EXIT
-
-sed -e 's/width="2579" height="957" viewBox="0 0 2579 957"/width="824" height="824" viewBox="0 0 824 824"/' \
-  "$SRC" > "$TMP_SVG"
-
 # Render every size the iconset needs, then rename the dual-purpose ones.
 for size in 16 32 64 128 256 512 1024; do
-  rsvg-convert -w "$size" -h "$size" "$TMP_SVG" -o "$IMGDIR/icon_${size}x${size}.png"
+  rsvg-convert -w "$size" -h "$size" "$SRC" -o "$IMGDIR/icon_${size}x${size}.png"
 done
+# Keep 512x512 PNG for runtime viewport icon
+cp "$IMGDIR/icon_512x512.png" "assets/app-icon.png"
+
 mv "$IMGDIR/icon_64x64.png"    "$IMGDIR/icon_32x32@2x.png"
 mv "$IMGDIR/icon_256x256.png"  "$IMGDIR/icon_128x128@2x.png"
 mv "$IMGDIR/icon_512x512.png"  "$IMGDIR/icon_256x256@2x.png"

@@ -4,6 +4,7 @@ mod midi;
 mod scale;
 mod state;
 mod ui;
+mod utils;
 
 use std::env;
 use std::error::Error;
@@ -116,11 +117,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     });
 
     // Run native macOS GUI on main thread
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([1160.0, 760.0])
+        .with_min_inner_size([1040.0, 699.3])
+        .with_title("Qwerkeys");
+    if let Ok(icon) = eframe::icon_data::from_png_bytes(asset_bytes!("app-icon.png")) {
+        viewport = viewport.with_icon(icon);
+    }
+
     let native_options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1160.0, 760.0])
-            .with_min_inner_size([1040.0, 699.3])
-            .with_title("Qwerkeys"),
+        viewport,
         ..Default::default()
     };
 

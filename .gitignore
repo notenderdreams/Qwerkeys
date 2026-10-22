@@ -1,4 +1,11 @@
 /target
 
-# Generated at bundle time by scripts/generate-icon.sh (from assets/app-icon.svg)
+# Generated icons (from assets/app-icon.svg)
 assets/AppIcon.icns
+assets/app-icon.png
+packaging/AppIcon.iconset
+
+# Generated bundle / DMG artifacts
+Qwerkeys.app
+dmg-staging
+*.dmg
