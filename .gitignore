@@ -9,3 +9,6 @@ packaging/AppIcon.iconset
 Qwerkeys.app
 dmg-staging
 *.dmg
+
+# graphify internals
+graphify-out/
