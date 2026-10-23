@@ -21,6 +21,7 @@ pub struct Settings {
     pub mapping_padding: i8,
     pub velocity: u8,
     pub show_unmapped_note_names: bool,
+    pub onboarding_completed: bool,
 }
 
 impl Default for Settings {
@@ -34,6 +35,7 @@ impl Default for Settings {
             mapping_padding: 0,
             velocity: 100,
             show_unmapped_note_names: true,
+            onboarding_completed: false,
         }
     }
 }
@@ -118,6 +120,7 @@ fn parse(text: &str) -> Settings {
                 }
             }
             "show_unmapped" => s.show_unmapped_note_names = value == "1",
+            "onboarding_completed" => s.onboarding_completed = value == "1",
             _ => {}
         }
     }
@@ -134,7 +137,7 @@ pub fn save(s: &Settings) {
     };
 
     let body = format!(
-        "theme={}\nroot={}\nscale={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\n",
+        "theme={}\nroot={}\nscale={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\n",
         s.theme as usize,
         s.root as usize,
         s.scale as usize,
@@ -143,6 +146,7 @@ pub fn save(s: &Settings) {
         s.mapping_padding,
         s.velocity,
         u8::from(s.show_unmapped_note_names),
+        u8::from(s.onboarding_completed),
     );
 
     use std::io::Write;
@@ -174,10 +178,11 @@ mod tests {
             mapping_padding: -3,
             velocity: 64,
             show_unmapped_note_names: false,
+            onboarding_completed: true,
         };
 
         let body = format!(
-            "theme={}\nroot={}\nscale={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\n",
+            "theme={}\nroot={}\nscale={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\n",
             s.theme as usize,
             s.root as usize,
             s.scale as usize,
@@ -186,6 +191,7 @@ mod tests {
             s.mapping_padding,
             s.velocity,
             u8::from(s.show_unmapped_note_names),
+            u8::from(s.onboarding_completed),
         );
 
         let parsed = parse(&body);
@@ -197,6 +203,7 @@ mod tests {
         assert_eq!(parsed.mapping_padding, s.mapping_padding);
         assert_eq!(parsed.velocity, s.velocity);
         assert_eq!(parsed.show_unmapped_note_names, s.show_unmapped_note_names);
+        assert_eq!(parsed.onboarding_completed, s.onboarding_completed);
     }
 
     #[test]

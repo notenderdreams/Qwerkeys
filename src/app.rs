@@ -9,6 +9,7 @@ use std::thread;
 use crate::iokit;
 use crate::iokit::{DeviceTargetMode, HidSystem, KeyboardDevice};
 use crate::midi::MidiEngine;
+use crate::permissions::Permission;
 use crate::state::AppState;
 use crate::ui::QwerkeysApp;
 use crate::utils::print_banner;
@@ -96,7 +97,24 @@ fn resolve_target(
     }
 }
 
-fn run_gui(state: Arc<AppState>, midi: Arc<MidiEngine>) -> Result<(), eframe::Error> {
+/// Spawns the background IOHID event listener thread.
+fn start_hid_listener(hid: HidSystem, mode: DeviceTargetMode, engine: Arc<MidiEngine>) {
+    thread::spawn(move || {
+        hid.start_listener(mode, move |usage, is_down| {
+            if is_down {
+                engine.handle_key_down(usage);
+            } else {
+                engine.handle_key_up(usage);
+            }
+        });
+    });
+}
+
+fn run_gui(
+    state: Arc<AppState>,
+    midi: Arc<MidiEngine>,
+    start_listener: Option<Box<dyn FnOnce() + Send>>,
+) -> Result<(), eframe::Error> {
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size(WINDOW_SIZE)
         .with_title(APP_TITLE);
@@ -110,13 +128,18 @@ fn run_gui(state: Arc<AppState>, midi: Arc<MidiEngine>) -> Result<(), eframe::Er
             viewport,
             ..Default::default()
         },
-        Box::new(move |cc| Ok(Box::new(QwerkeysApp::new(cc, state, midi)))),
+        Box::new(move |cc| Ok(Box::new(QwerkeysApp::new(cc, state, midi, start_listener)))),
     )
 }
 
 /// Application entry point: hardware setup, MIDI engine, background
 /// HID listener, and the GUI event loop.
 pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
+    if args.iter().any(|a| a == "--check-input-monitoring") {
+        let granted = crate::permissions::input_monitoring_granted();
+        std::process::exit(if granted { 0 } else { 1 });
+    }
+
     let hid = HidSystem::new()?;
     let keyboards = hid.enumerate_keyboards();
     let cli = parse_cli(args);
@@ -135,23 +158,23 @@ pub fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     iokit::set_suppression_enabled(is_suppressed);
     install_shutdown_hooks();
 
+    // Start background IOHID event listener thread. While Input Monitoring
+    // is missing, the onboarding page owns startup: the listener (and with
+    // it the implicit macOS consent flow) only runs once onboarding ends.
     let midi_engine = Arc::new(MidiEngine::new(MIDI_PORT_NAME, Arc::clone(&state))?);
     midi_engine.panic_all_notes();
     print_banner(&display_desc, is_suppressed, MIDI_PORT_NAME);
 
-    // Start background IOHID event listener thread
-    let listener_engine = Arc::clone(&midi_engine);
-    thread::spawn(move || {
-        hid.start_listener(target_mode, move |usage, is_down| {
-            if is_down {
-                listener_engine.handle_key_down(usage);
-            } else {
-                listener_engine.handle_key_up(usage);
-            }
-        });
-    });
-
-    run_gui(state, midi_engine)?;
+    if Permission::InputMonitoring.is_granted() {
+        start_hid_listener(hid, target_mode, Arc::clone(&midi_engine));
+        run_gui(state, midi_engine, None)?;
+    } else {
+        let midi_engine_for_listener = Arc::clone(&midi_engine);
+        let start_listener = Box::new(move || {
+            start_hid_listener(hid, target_mode, midi_engine_for_listener);
+        }) as Box<dyn FnOnce() + Send>;
+        run_gui(state, midi_engine, Some(start_listener))?;
+    }
 
     // Clean up upon GUI close
     iokit::stop_hid_system();

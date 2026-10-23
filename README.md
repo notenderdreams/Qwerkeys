@@ -41,7 +41,7 @@ Download the latest prebuilt DMG from the [**releases page**](https://github.com
 
 1. Open the DMG and drag **Qwerkeys** into the **Applications** folder
 2. First launch: right-click the app → **Open** (it's not notarized, so macOS may warn about an unidentified developer)
-3. Grant the **Input Monitoring** and/or **Accessibility** permission when macOS asks — Qwerkeys needs to read global keystrokes
+3. Grant the **Input Monitoring** and/or **Accessibility** permission when macOS asks — Qwerkeys opens with a short onboarding page explaining and linking to each permission; both can also be granted later via **System Settings → Privacy & Security**
 4. Select **`qwerkeys-input`** as a MIDI input in your DAW and play
 
 Requires macOS 11 or later (Apple Silicon).

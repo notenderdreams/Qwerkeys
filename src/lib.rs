@@ -7,6 +7,7 @@ pub mod app;
 pub(crate) mod iokit;
 pub(crate) mod mapping;
 pub(crate) mod midi;
+pub(crate) mod permissions;
 pub(crate) mod scale;
 pub(crate) mod settings;
 pub(crate) mod state;

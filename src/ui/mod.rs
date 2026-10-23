@@ -1,5 +1,6 @@
 pub mod bottom_bar;
 pub mod keyboard;
+pub mod onboarding;
 pub mod piano;
 pub mod settings;
 pub mod setup_bar;
@@ -24,6 +25,21 @@ pub struct QwerkeysApp {
     pub(super) theme_colors: ThemeColors,
     pub(super) settings_open: bool,
     pub(super) settings_icon_rot: f32,
+
+    /// Whether the onboarding/permissions page is dismissed.
+    pub(super) onboarding_done: bool,
+    /// Per-permission flag: the TCC prompt was triggered but the permission
+    /// still isn't granted — show the "open System Settings" deep link.
+    pub(super) onboarding_requested: [bool; 2],
+    /// macOS granted Input Monitoring in System Settings, but the running
+    /// process cannot receive events until it restarts.
+    pub(super) input_monitoring_needs_restart: Arc<std::sync::atomic::AtomicBool>,
+    pub(super) restart_check_in_flight: Arc<std::sync::atomic::AtomicBool>,
+    pub(super) last_restart_check: Option<std::time::Instant>,
+    /// HID listener startup deferred by onboarding until it is dismissed.
+    /// Started via the GUI thread so the macOS consent alert appears after
+    /// the onboarding page is visible, not on launch before it.
+    pub(super) start_listener: Option<Box<dyn FnOnce() + Send>>,
 }
 
 impl QwerkeysApp {
@@ -31,12 +47,19 @@ impl QwerkeysApp {
         cc: &eframe::CreationContext<'_>,
         state: Arc<AppState>,
         midi: Arc<MidiEngine>,
+        start_listener: Option<Box<dyn FnOnce() + Send>>,
     ) -> Self {
         egui_extras::install_image_loaders(&cc.egui_ctx);
 
         // Register the Phosphor icon font (used by the settings gear button)
         let mut fonts = egui::FontDefinitions::default();
         egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+        // add_to_fonts only registers Phosphor as a fallback for the
+        // Proportional family; also add it to Monospace so icon glyphs
+        // render inside monospace badges/pills instead of .notdef squares.
+        if let Some(mono) = fonts.families.get_mut(&egui::FontFamily::Monospace) {
+            mono.push("phosphor".into());
+        }
         cc.egui_ctx.set_fonts(fonts);
         state.set_egui_ctx(cc.egui_ctx.clone());
 
@@ -58,6 +81,12 @@ impl QwerkeysApp {
         visuals.override_text_color = Some(theme_colors.TEXT_SECONDARY);
         cc.egui_ctx.set_visuals(visuals);
 
+        let onboarding_done = crate::permissions::is_onboarding_done(
+            crate::permissions::input_monitoring_granted(),
+            crate::permissions::accessibility_granted(),
+            state.onboarding_completed.load(Ordering::SeqCst),
+        );
+
         Self {
             state,
             midi,
@@ -67,6 +96,12 @@ impl QwerkeysApp {
             theme_colors,
             settings_open: false,
             settings_icon_rot: 0.0,
+            onboarding_done,
+            onboarding_requested: [false; 2],
+            input_monitoring_needs_restart: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            restart_check_in_flight: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            last_restart_check: None,
+            start_listener,
         }
     }
 
@@ -93,6 +128,12 @@ impl QwerkeysApp {
 
 impl eframe::App for QwerkeysApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Onboarding replaces the whole main workspace while it's active.
+        if !self.onboarding_done {
+            self.render_onboarding(ui);
+            return;
+        }
+
         let theme = self.theme_colors;
         let ctx = ui.ctx().clone();
         self.state.set_egui_ctx(ctx.clone());

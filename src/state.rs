@@ -19,6 +19,7 @@ pub struct AppState {
     pub velocity: AtomicU8,
     pub sustain_held: AtomicBool,
     pub show_unmapped_note_names: AtomicBool,
+    pub onboarding_completed: AtomicBool,
 
     /// Discriminant of the active [`AppTheme`], kept here so settings
     /// changes can be persisted from a single chokepoint.
@@ -49,6 +50,7 @@ impl AppState {
             velocity: AtomicU8::new(s.velocity),
             sustain_held: AtomicBool::new(false),
             show_unmapped_note_names: AtomicBool::new(s.show_unmapped_note_names),
+            onboarding_completed: AtomicBool::new(s.onboarding_completed),
             theme_index: AtomicUsize::new(s.theme as usize),
 
             devices: Mutex::new(Vec::new()),
@@ -95,6 +97,7 @@ impl AppState {
             mapping_padding: self.mapping_padding.load(Ordering::SeqCst),
             velocity: self.velocity.load(Ordering::SeqCst),
             show_unmapped_note_names: self.get_show_unmapped_note_names(),
+            onboarding_completed: self.onboarding_completed.load(Ordering::SeqCst),
         });
     }
 

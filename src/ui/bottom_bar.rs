@@ -38,6 +38,7 @@ impl QwerkeysApp {
                 ui.label(
                     RichText::new("PORT: qwerkeys-input")
                         .font(FontId::monospace(9.0))
+                        .strong()
                         .color(theme.TEXT_MUTED),
                 );
             });
