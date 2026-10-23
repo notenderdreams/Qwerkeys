@@ -1,8 +1,6 @@
 /target
 
-# Generated icons (from assets/app-icon.svg)
-assets/AppIcon.icns
-assets/app-icon.png
+# Scratch iconset directory from iconutil
 packaging/AppIcon.iconset
 
 # Generated bundle / DMG artifacts

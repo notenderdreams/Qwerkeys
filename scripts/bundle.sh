@@ -43,9 +43,6 @@ rm -rf "$APP" dmg-staging
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp packaging/Info.plist "$APP/Contents/Info.plist"
-# Generate the icns from the SVG source, always, so the freshest artwork is
-# bundled (see generate-icon.swift).
-scripts/generate-icon.swift
 [[ -f "assets/AppIcon.icns" ]] || { echo "error: assets/AppIcon.icns not found" >&2; exit 1; }
 cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 /usr/libexec/PlistBuddy \

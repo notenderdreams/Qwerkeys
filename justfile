@@ -76,10 +76,10 @@ install version="v0.0.0-dev": (bundle version)
 # Install the DEBUG build, then reset privacy grants so next launch triggers fresh permission prompt
 install-debug: (install "v0.0.0-debug") reset-permissions
 
-# Clean build target, bundle outputs, and generated icons
+# Clean build target, bundle outputs, and scratch files
 clean:
     cargo clean
-    rm -rf Qwerkeys.app dmg-staging *.dmg packaging/AppIcon.iconset assets/AppIcon.icns assets/app-icon.png
+    rm -rf Qwerkeys.app dmg-staging *.dmg packaging/AppIcon.iconset
 
 # Install git hooks into .git/hooks/
 setup-hooks:
