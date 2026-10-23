@@ -73,15 +73,7 @@ impl QwerkeysApp {
             .unwrap_or_default();
         let theme_colors = current_theme.colors();
 
-        let mut visuals = if current_theme.is_light() {
-            egui::Visuals::light()
-        } else {
-            egui::Visuals::dark()
-        };
-        visuals.panel_fill = theme_colors.BG_APP;
-        visuals.window_fill = theme_colors.BG_APP;
-        visuals.override_text_color = Some(theme_colors.TEXT_SECONDARY);
-        cc.egui_ctx.set_visuals(visuals);
+        cc.egui_ctx.set_visuals(current_theme.egui_visuals());
 
         let onboarding_done = crate::permissions::is_onboarding_done(
             crate::permissions::input_monitoring_granted(),
@@ -112,15 +104,7 @@ impl QwerkeysApp {
     pub(super) fn set_theme(&mut self, theme: AppTheme, ctx: &egui::Context) {
         self.current_theme = theme;
         self.theme_colors = theme.colors();
-        let mut visuals = if theme.is_light() {
-            egui::Visuals::light()
-        } else {
-            egui::Visuals::dark()
-        };
-        visuals.panel_fill = self.theme_colors.BG_APP;
-        visuals.window_fill = self.theme_colors.BG_APP;
-        visuals.override_text_color = Some(self.theme_colors.TEXT_SECONDARY);
-        ctx.set_visuals(visuals);
+        ctx.set_visuals(theme.egui_visuals());
 
         // Save-on-change: remember the new theme in state, then snapshot settings
         self.state

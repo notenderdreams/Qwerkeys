@@ -1,4 +1,4 @@
-use egui::Color32;
+use egui::{Color32, Stroke, Visuals};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AppTheme {
@@ -41,6 +41,21 @@ impl AppTheme {
             AppTheme::Sage => ThemeColors::studio_sage(),
         }
     }
+
+    pub fn egui_visuals(&self) -> Visuals {
+        let colors = self.colors();
+        let mut visuals = if self.is_light() {
+            Visuals::light()
+        } else {
+            Visuals::dark()
+        };
+        visuals.panel_fill = colors.BG_APP;
+        visuals.window_fill = colors.BG_APP;
+        visuals.override_text_color = Some(colors.TEXT_SECONDARY);
+        visuals.selection.bg_fill = colors.HIGHLIGHT_BG;
+        visuals.selection.stroke = Stroke::new(1.0, colors.TEXT_PRIMARY);
+        visuals
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -67,6 +82,7 @@ pub struct ThemeColors {
     pub SAGE_BADGE_TXT: Color32,
     pub SAGE_SELECTED_BG: Color32,
     pub SAGE_SELECTED_TXT: Color32,
+    pub HIGHLIGHT_BG: Color32,
 
     pub TEXT_PRIMARY: Color32,
     pub TEXT_SECONDARY: Color32,
@@ -141,6 +157,7 @@ impl ThemeColors {
             SAGE_BADGE_TXT: Color32::from_rgb(0x3B, 0x42, 0x70),
             SAGE_SELECTED_BG: Color32::from_rgb(0x54, 0x5A, 0x99),
             SAGE_SELECTED_TXT: Color32::from_rgb(0xFF, 0xFF, 0xFF),
+            HIGHLIGHT_BG: Color32::from_rgb(0xB6, 0xBD, 0xE2),
             TEXT_PRIMARY: Color32::from_rgb(0x1E, 0x1F, 0x23),
             TEXT_SECONDARY: Color32::from_rgb(0x40, 0x43, 0x4A),
             TEXT_MUTED: Color32::from_rgb(0x7A, 0x7E, 0x85),
@@ -206,6 +223,7 @@ impl ThemeColors {
             SAGE_BADGE_TXT: Color32::from_rgb(0xBD, 0xCB, 0xEC),
             SAGE_SELECTED_BG: Color32::from_rgb(0x54, 0x5A, 0x99),
             SAGE_SELECTED_TXT: Color32::from_rgb(0xFD, 0xFD, 0xFF),
+            HIGHLIGHT_BG: Color32::from_rgb(0x3C, 0x41, 0x6E),
             TEXT_PRIMARY: Color32::from_rgb(0xFD, 0xFD, 0xFF),
             TEXT_SECONDARY: Color32::from_rgb(0xE6, 0xE6, 0xE6),
             TEXT_MUTED: Color32::from_rgb(0xAA, 0xAA, 0xAA),
@@ -271,6 +289,7 @@ impl ThemeColors {
             SAGE_BADGE_TXT: Color32::from_rgb(0xBE, 0xCD, 0xAD),
             SAGE_SELECTED_BG: Color32::from_rgb(0xDF, 0xE5, 0xD8),
             SAGE_SELECTED_TXT: Color32::from_rgb(0x30, 0x38, 0x2A),
+            HIGHLIGHT_BG: Color32::from_rgb(0x5A, 0x68, 0x4E),
             TEXT_PRIMARY: Color32::from_rgb(0xF0, 0xF1, 0xED),
             TEXT_SECONDARY: Color32::from_rgb(0xDE, 0xDF, 0xD9),
             TEXT_MUTED: Color32::from_rgb(0x85, 0x8B, 0x80),
@@ -312,6 +331,21 @@ impl ThemeColors {
             PIANO_BLACK_ROOT_BG: Color32::from_rgb(0x42, 0x56, 0x38),
             PIANO_BLACK_IN_SCALE_TXT: Color32::from_rgb(0xC2, 0xD2, 0xB4),
             PIANO_BLACK_OUT_SCALE_TXT: Color32::from_rgb(0x4E, 0x54, 0x4A),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_theme_selection_visuals() {
+        for theme in AppTheme::ALL {
+            let colors = theme.colors();
+            let visuals = theme.egui_visuals();
+            assert_eq!(visuals.selection.bg_fill, colors.HIGHLIGHT_BG);
+            assert_eq!(visuals.selection.stroke.color, colors.TEXT_PRIMARY);
         }
     }
 }
