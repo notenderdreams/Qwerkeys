@@ -40,6 +40,8 @@ pub struct QwerkeysApp {
     /// Started via the GUI thread so the macOS consent alert appears after
     /// the onboarding page is visible, not on launch before it.
     pub(super) start_listener: Option<Box<dyn FnOnce() + Send>>,
+    pub(super) permissions_reset_at: Option<std::time::Instant>,
+    pub(super) permissions_reset_done: bool,
 }
 
 impl QwerkeysApp {
@@ -102,6 +104,8 @@ impl QwerkeysApp {
             restart_check_in_flight: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             last_restart_check: None,
             start_listener,
+            permissions_reset_at: None,
+            permissions_reset_done: false,
         }
     }
 

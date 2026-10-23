@@ -41,6 +41,20 @@ unsafe extern "C" {
 /// `kAXTrustedCheckOptionPrompt` string constant (HIServices).
 const K_AX_TRUSTED_CHECK_OPTION_PROMPT: &str = "AXTrustedCheckOptionPrompt";
 
+/// Bundle identifier for Qwerkeys.
+pub const BUNDLE_ID: &str = "com.notenderdreams.qwerkeys";
+
+/// Reset macOS TCC privacy grants for Qwerkeys (clears stale permissions
+/// left by older versions or mismatched ad-hoc signatures).
+pub fn reset_all() {
+    let _ = std::process::Command::new("/usr/bin/tccutil")
+        .args(["reset", "ListenEvent", BUNDLE_ID])
+        .status();
+    let _ = std::process::Command::new("/usr/bin/tccutil")
+        .args(["reset", "Accessibility", BUNDLE_ID])
+        .status();
+}
+
 /// A macOS privacy service required (or recommended) by Qwerkeys.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Permission {
@@ -68,13 +82,13 @@ impl Permission {
             return true;
         }
         match self {
-            Self::InputMonitoring => unsafe { CGRequestListenEventAccess() == 1 },
+            Self::InputMonitoring => unsafe { CGRequestListenEventAccess() != 0 },
             Self::Accessibility => unsafe {
                 let options = CFDictionary::from_CFType_pairs(&[(
                     CFString::new(K_AX_TRUSTED_CHECK_OPTION_PROMPT),
                     CFBoolean::true_value(),
                 )]);
-                AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef() as *const c_void) == 1
+                AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef() as *const c_void) != 0
             },
         }
     }
@@ -102,12 +116,12 @@ impl Permission {
 
 /// Does the app currently hold the Accessibility permission?
 pub fn accessibility_granted() -> bool {
-    unsafe { AXIsProcessTrusted() == 1 }
+    unsafe { AXIsProcessTrusted() != 0 }
 }
 
 /// Does the app currently hold the Input Monitoring permission?
 pub fn input_monitoring_granted() -> bool {
-    unsafe { CGPreflightListenEventAccess() == 1 }
+    unsafe { CGPreflightListenEventAccess() != 0 }
 }
 
 /// Determine whether onboarding should be considered done and dismissed.

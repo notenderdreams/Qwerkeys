@@ -11,7 +11,9 @@ use egui::{
     Align, Align2, Color32, CornerRadius, CursorIcon, FontId, Frame, Layout, Margin, Pos2, Rect,
     RichText, Sense, Stroke, Ui, vec2,
 };
-use egui_phosphor::regular::{ARROWS_CLOCKWISE, CHECK_CIRCLE, CURSOR, KEYBOARD, WARNING_CIRCLE};
+use egui_phosphor::regular::{
+    ARROW_RIGHT, ARROWS_CLOCKWISE, CHECK, CHECK_CIRCLE, CURSOR, KEYBOARD, WARNING_CIRCLE,
+};
 
 use super::QwerkeysApp;
 use crate::permissions::Permission;
@@ -27,7 +29,7 @@ const BLOCK_PAD: f32 = 6.0;
 
 /// Total height of the centered stat panel stack (logo through skip); drives
 /// the vertical centering offset. Keep in sync with the layout sums below.
-const CONTENT_H: f32 = 473.0;
+const CONTENT_H: f32 = 450.0;
 
 /// Static content of one permission card on the onboarding page.
 struct PermissionCard {
@@ -69,12 +71,11 @@ impl QwerkeysApp {
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_millis(300));
 
-        // If Input Monitoring is not yet held by this process, but was requested,
+        // If Input Monitoring is not yet held by this process,
         // periodically check if a fresh subprocess has it (meaning the user toggled it
         // in System Settings, but macOS requires an app relaunch to apply it).
         let input_granted = Permission::InputMonitoring.is_granted();
         if !input_granted
-            && self.onboarding_requested[0]
             && !self
                 .input_monitoring_needs_restart
                 .load(std::sync::atomic::Ordering::SeqCst)
@@ -98,59 +99,147 @@ impl QwerkeysApp {
             });
         }
 
+        let ready =
+            Permission::InputMonitoring.is_granted() && Permission::Accessibility.is_granted();
+        let needs_restart = self
+            .input_monitoring_needs_restart
+            .load(std::sync::atomic::Ordering::SeqCst);
+
+        // 1. Sticky bottom panel for troubleshooting reset link
+        // Only shown after the user has interacted with a permission card,
+        // and disappears permanently once reset is clicked.
+        let card_clicked = self.onboarding_requested.iter().any(|&r| r);
+        let show_reset_msg = self
+            .permissions_reset_at
+            .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(6));
+        let show_reset_bar = !ready
+            && !needs_restart
+            && (show_reset_msg || (card_clicked && !self.permissions_reset_done));
+
+        if show_reset_bar {
+            egui::Panel::bottom("onboarding_bottom_bar")
+                .show_separator_line(false)
+                .frame(
+                    Frame::NONE
+                        .fill(theme.BG_BAR)
+                        .stroke(Stroke::new(0.5, theme.BORDER_DARK))
+                        .inner_margin(Margin {
+                            left: 18,
+                            right: 18,
+                            top: 8,
+                            bottom: 8,
+                        }),
+                )
+                .show(ui, |ui| {
+                    ui.vertical_centered(|ui| {
+                        if show_reset_msg {
+                            ui.label(
+                                RichText::new(format!(
+                                    "{CHECK} Reset stale permissions. Toggle them fresh in System Settings."
+                                ))
+                                .font(FontId::proportional(9.5))
+                                .color(theme.SAGE_ACCENT),
+                            );
+                        } else if !self.permissions_reset_done {
+                            ui.horizontal(|ui| {
+                                let row_w = 440.0;
+                                let row_pad = ((ui.available_width() - row_w) * 0.5).max(0.0);
+                                if row_pad > 0.0 {
+                                    ui.add_space(row_pad);
+                                }
+                                ui.spacing_mut().item_spacing.x = 4.0;
+                                ui.label(
+                                    RichText::new(
+                                        "Having problems with permissions from previous installations?",
+                                    )
+                                    .font(FontId::proportional(9.5))
+                                    .color(theme.TEXT_MUTED),
+                                );
+                                if ui
+                                    .link(
+                                        RichText::new("[Reset Permissions]")
+                                            .font(FontId::monospace(9.5))
+                                            .color(theme.SAGE_ACCENT),
+                                    )
+                                    .on_hover_text(
+                                        "Clears stale macOS privacy records for Qwerkeys and opens System Settings fresh",
+                                    )
+                                    .clicked()
+                                {
+                                    crate::permissions::reset_all();
+                                    Permission::InputMonitoring.request();
+                                    Permission::Accessibility.request();
+                                    Permission::InputMonitoring.open_system_settings();
+                                    self.permissions_reset_done = true;
+                                    self.permissions_reset_at = Some(std::time::Instant::now());
+                                }
+                            });
+                        }
+                    });
+                });
+        }
+
+        // 2. Centered main onboarding area
+        let block_w = CARD_W + 2.0 * BLOCK_PAD;
+
         egui::CentralPanel::default()
-            .frame(Frame::NONE.fill(theme.BG_APP))
+            .frame(Frame::NONE.fill(theme.BG_APP).inner_margin(Margin::ZERO))
             .show(ui, |ui| {
-                let view_h = ui.max_rect().height();
+                let avail_w = ui.available_width();
+                let avail_h = ui.available_height();
+                let side_pad = ((avail_w - block_w) * 0.5).max(0.0);
+                let top_pad = ((avail_h - CONTENT_H) * 0.5).max(12.0);
 
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        ui.with_layout(Layout::top_down(Align::Center), |ui| {
-                            ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
-
-                            // Exact vertical centering of the fixed-height stack.
-                            ui.add_space(((view_h - CONTENT_H) * 0.5).max(12.0));
-
-                            // 1. Logo w/ version, right above the SETUP kicker
-                            const LOGO_H: f32 = 76.0;
-                            ui.add(
-                                egui::Image::new(egui::include_image!("../../assets/logo.svg"))
-                                    .fit_to_exact_size(vec2(316.0, LOGO_H))
-                                    .tint(theme.LOGO),
-                            );
-                            ui.add_space(4.0);
-                            ui.label(
-                                RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
-                                    .font(FontId::monospace(9.0))
-                                    .strong()
-                                    .color(theme.TEXT_LIGHT_MUTED),
-                            );
-
-                            ui.add_space(26.0);
-                            ui.label(
-                                RichText::new("SETUP")
-                                    .font(FontId::monospace(9.5))
-                                    .strong()
-                                    .color(theme.TEXT_HEADING),
-                            );
-
-                            ui.add_space(4.0);
-                            ui.label(
-                                RichText::new("Welcome to Qwerkeys")
-                                    .font(FontId::proportional(23.0))
-                                    .strong()
-                                    .color(theme.TEXT_PRIMARY),
-                            );
-
-                            // 2. Permission rows inside one rounded block
-                            ui.add_space(16.0);
-                            let block_w = CARD_W + 2.0 * BLOCK_PAD;
-                            let block_h = 2.0 * CARD_H + 1.0 + 2.0 * BLOCK_PAD;
+                        ui.add_space(top_pad);
+                        ui.horizontal(|ui| {
+                            if side_pad > 0.0 {
+                                ui.add_space(side_pad);
+                            }
                             ui.allocate_ui_with_layout(
-                                vec2(block_w, block_h),
+                                vec2(block_w, 0.0),
                                 Layout::top_down(Align::Center),
                                 |ui| {
+                                    ui.set_width(block_w);
+                                    ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+
+                                    // Logo w/ version, right above the SETUP kicker
+                                    const LOGO_H: f32 = 76.0;
+                                    ui.add(
+                                        egui::Image::new(egui::include_image!(
+                                            "../../assets/logo.svg"
+                                        ))
+                                        .fit_to_exact_size(vec2(316.0, LOGO_H))
+                                        .tint(theme.LOGO),
+                                    );
+                                    ui.add_space(4.0);
+                                    ui.label(
+                                        RichText::new(format!("v{}", env!("CARGO_PKG_VERSION")))
+                                            .font(FontId::monospace(9.0))
+                                            .strong()
+                                            .color(theme.TEXT_LIGHT_MUTED),
+                                    );
+
+                                    ui.add_space(26.0);
+                                    ui.label(
+                                        RichText::new("SETUP")
+                                            .font(FontId::monospace(9.5))
+                                            .strong()
+                                            .color(theme.TEXT_HEADING),
+                                    );
+
+                                    ui.add_space(4.0);
+                                    ui.label(
+                                        RichText::new("Welcome to Qwerkeys")
+                                            .font(FontId::proportional(23.0))
+                                            .strong()
+                                            .color(theme.TEXT_PRIMARY),
+                                    );
+
+                                    // Permission rows inside one rounded block
+                                    ui.add_space(16.0);
                                     Frame::NONE
                                         .fill(theme.BG_PANEL)
                                         .stroke(Stroke::new(1.2, theme.BORDER_PANEL))
@@ -179,77 +268,140 @@ impl QwerkeysApp {
                                                 self.render_permission_card(ui, card, idx);
                                             }
                                         });
+
+                                    // Hint text directly under permission block
+                                    ui.add_space(14.0);
+                                    let hint_text = if needs_restart {
+                                        "Input Monitoring granted in System Settings! Relaunch Qwerkeys to activate.".to_string()
+                                    } else {
+                                        format!(
+                                            "Permissions can be changed anytime in System Settings {ARROW_RIGHT} Privacy & Security"
+                                        )
+                                    };
+                                    ui.label(
+                                        RichText::new(hint_text)
+                                            .font(FontId::proportional(9.5))
+                                            .color(if needs_restart {
+                                                theme.SAGE_ACCENT
+                                            } else {
+                                                theme.TEXT_MUTED
+                                            }),
+                                    );
+
+                                    // Action button (shown only when ready: "Get Started" or when restart is needed: "Relaunch to Apply")
+                                    if ready || needs_restart {
+                                        ui.add_space(14.0);
+                                        let label = if ready {
+                                            "Get Started"
+                                        } else {
+                                            "Relaunch to Apply"
+                                        };
+
+                                        let (btn_rect, btn_resp) = ui
+                                            .allocate_exact_size(vec2(230.0, 38.0), Sense::click());
+                                        let btn_resp = btn_resp
+                                            .on_hover_cursor(CursorIcon::PointingHand);
+                                        let btn_hovered = btn_resp.hovered();
+                                        let btn_pressed = btn_resp.is_pointer_button_down_on();
+
+                                        let (btn_bg, btn_y_off) = if btn_pressed {
+                                            (theme.SAGE_ACTIVE, 0.8)
+                                        } else if btn_hovered {
+                                            (mix(theme.SAGE_ACCENT, Color32::WHITE, 0.12), 0.0)
+                                        } else {
+                                            (theme.SAGE_ACCENT, 0.0)
+                                        };
+
+                                        let btn_painter = ui.painter_at(btn_rect);
+                                        btn_painter.rect(
+                                            btn_rect,
+                                            CornerRadius::same(6),
+                                            btn_bg,
+                                            Stroke::new(1.0, theme.BORDER_DARK),
+                                            egui::StrokeKind::Inside,
+                                        );
+
+                                        btn_painter.text(
+                                            Pos2::new(
+                                                btn_rect.center().x,
+                                                btn_rect.center().y + btn_y_off,
+                                            ),
+                                            Align2::CENTER_CENTER,
+                                            label,
+                                            FontId::proportional(14.0),
+                                            theme.KEY_ACTIVE_TXT,
+                                        );
+
+                                        if btn_resp.clicked() {
+                                            if needs_restart && !ready {
+                                                crate::permissions::relaunch_app();
+                                            } else {
+                                                self.finish_onboarding();
+                                            }
+                                        }
+                                    }
+
+                                    // Skip button with hover background, rounded border, and tactile click feel
+                                    if !ready {
+                                        ui.add_space(10.0);
+                                        let (rect, response) = ui.allocate_exact_size(
+                                            vec2(140.0, 28.0),
+                                            Sense::click(),
+                                        );
+                                        let response = response
+                                            .on_hover_cursor(CursorIcon::PointingHand);
+                                        let is_hovered = response.hovered();
+                                        let is_pressed = response.is_pointer_button_down_on();
+
+                                        let (bg_color, stroke_color, text_color, y_offset) =
+                                            if is_pressed {
+                                                (
+                                                    theme.BG_FIELD,
+                                                    theme.BORDER_FIELD,
+                                                    theme.TEXT_PRIMARY,
+                                                    0.5,
+                                                )
+                                            } else if is_hovered {
+                                                (
+                                                    theme.BG_BUTTON,
+                                                    theme.BORDER_DARK,
+                                                    theme.TEXT_PRIMARY,
+                                                    0.0,
+                                                )
+                                            } else {
+                                                (
+                                                    Color32::TRANSPARENT,
+                                                    Color32::TRANSPARENT,
+                                                    theme.TEXT_MUTED,
+                                                    0.0,
+                                                )
+                                            };
+
+                                        let painter = ui.painter_at(rect);
+                                        if is_hovered || is_pressed {
+                                            painter.rect(
+                                                rect,
+                                                CornerRadius::same(6),
+                                                bg_color,
+                                                Stroke::new(1.0, stroke_color),
+                                                egui::StrokeKind::Inside,
+                                            );
+                                        }
+
+                                        painter.text(
+                                            Pos2::new(rect.center().x, rect.center().y + y_offset),
+                                            Align2::CENTER_CENTER,
+                                            "Skip for now",
+                                            FontId::proportional(11.0),
+                                            text_color,
+                                        );
+
+                                        if response.clicked() {
+                                            self.finish_onboarding();
+                                        }
+                                    }
                                 },
                             );
-
-                            // 3. Hint + continue button + skip
-                            ui.add_space(16.0);
-                            let needs_restart = self
-                                .input_monitoring_needs_restart
-                                .load(std::sync::atomic::Ordering::SeqCst);
-                            let hint_text = if needs_restart {
-                                "Input Monitoring granted in System Settings! Relaunch Qwerkeys to activate."
-                            } else {
-                                "Permissions can be changed anytime in System Settings \u{2192} Privacy & Security."
-                            };
-                            ui.label(
-                                RichText::new(hint_text)
-                                    .font(FontId::proportional(9.0))
-                                    .color(if needs_restart {
-                                        theme.SAGE_ACCENT
-                                    } else {
-                                        theme.TEXT_MUTED
-                                    }),
-                            );
-
-                            ui.add_space(10.0);
-                            let ready = Permission::InputMonitoring.is_granted()
-                                && Permission::Accessibility.is_granted();
-                            let (label, fill, txt) = if ready {
-                                ("Get Started", theme.SAGE_ACCENT, theme.KEY_ACTIVE_TXT)
-                            } else if needs_restart {
-                                ("Relaunch to Apply", theme.SAGE_ACCENT, theme.KEY_ACTIVE_TXT)
-                            } else {
-                                ("Continue", theme.BG_BUTTON, theme.TEXT_PRIMARY)
-                            };
-                            if ui
-                                .add(
-                                    egui::Button::new(
-                                        RichText::new(label)
-                                            .font(FontId::proportional(14.0))
-                                            .strong()
-                                            .color(txt),
-                                    )
-                                    .fill(fill)
-                                    .stroke(Stroke::new(1.0, theme.BORDER_DARK))
-                                    .corner_radius(CornerRadius::same(6))
-                                    .min_size(vec2(230.0, 38.0)),
-                                )
-                                .clicked()
-                            {
-                                if needs_restart && !ready {
-                                    crate::permissions::relaunch_app();
-                                } else {
-                                    self.finish_onboarding();
-                                }
-                            }
-
-                            ui.add_space(8.0);
-                            if ui
-                                .add(
-                                    egui::Button::new(
-                                        RichText::new("Skip for now")
-                                            .font(FontId::proportional(10.5))
-                                            .color(theme.TEXT_MUTED),
-                                    )
-                                    .fill(Color32::TRANSPARENT)
-                                    .stroke(Stroke::NONE)
-                                    .min_size(vec2(230.0, 20.0)),
-                                )
-                                .clicked()
-                            {
-                                self.finish_onboarding();
-                            }
                         });
                     });
             });
