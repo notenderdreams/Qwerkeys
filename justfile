@@ -6,6 +6,10 @@ default:
 dev *args:
     cargo run -- {{args}}
 
+# Run and auto-rebuild on file changes (requires `cargo install cargo-watch`)
+watch *args:
+    cargo watch -x "run -- {{args}}"
+
 # Run release build
 run *args:
     cargo run --release -- {{args}}
@@ -45,9 +49,30 @@ ci: fmt-check lint test
 icon:
     ./scripts/generate-icon.swift
 
-# Build release and bundle into Qwerkeys.app and DMG
-bundle version="v0.0.0-dev": build-release
+# Bundle into Qwerkeys.app and DMG (a `-debug` version suffix uses the DEBUG binary)
+bundle version="v0.0.0-dev":
+    #!/usr/bin/env sh
+    case "{{version}}" in
+        *-debug) cargo build ;;
+        *) cargo build --release ;;
+    esac
     ./scripts/bundle.sh {{version}}
+
+# Reset Input Monitoring & Accessibility grants for com.notenderdreams.qwerkeys (use before `just install` to re-test onboarding)
+reset-permissions:
+    tccutil reset ListenEvent com.notenderdreams.qwerkeys || sudo tccutil reset ListenEvent com.notenderdreams.qwerkeys
+    tccutil reset Accessibility com.notenderdreams.qwerkeys || sudo tccutil reset Accessibility com.notenderdreams.qwerkeys
+    @echo "✓ Reset Input Monitoring & Accessibility for com.notenderdreams.qwerkeys"
+
+# Clean, build release, bundle, and install Qwerkeys.app into /Applications (pair with `just reset-permissions` to re-test onboarding)
+install version="v0.0.0-dev": (bundle version)
+    @rm -rf /Applications/Qwerkeys.app
+    @cp -R Qwerkeys.app /Applications/Qwerkeys.app
+    @version="{{version}}"; echo "✓ Installed /Applications/Qwerkeys.app"; \
+        echo "  DMG kept in repo: Qwerkeys-${version#v}.dmg"    
+
+# Reset privacy grants, then install the DEBUG build (bundled .app always shows onboarding)
+install-debug: reset-permissions (install "v0.0.0-debug")
 
 # Clean build target, bundle outputs, and generated icons
 clean:

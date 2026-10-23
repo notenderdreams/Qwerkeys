@@ -2,10 +2,15 @@
 # Bundle the release binary into Qwerkeys.app and a distributable DMG.
 #
 # Usage: scripts/bundle.sh [version]
-#   Expects target/release/qwerkeys to exist. Creates:
+#   Expects the matching binary to exist. Creates:
 #     - Qwerkeys.app          (staged ad-hoc signed bundle)
 #     - dmg-staging/          (drag-to-install staging)
 #     - Qwerkeys-<version>.dmg
+#
+# A version ending in `-debug` (e.g. `v0.0.0-debug`) bundles the DEBUG build
+# (target/debug/qwerkeys) instead — handy for `just install v0.0.0-debug`
+# testing: the bundled .app keeps `debug_assertions` so the onboarding page
+# is always shown.
 
 set -euo pipefail
 
@@ -15,17 +20,23 @@ VERSION="${1:-}"
 if [[ -z "$VERSION" ]]; then
   echo "Usage: $0 <version>" >&2
   echo "  e.g. $0 v1.2.3 (version used for the output filename only)" >&2
+  echo "  append -debug to bundle the debug binary instead of release" >&2
   exit 1
 fi
 VERSION="${VERSION#v}"
 
-BIN="target/release/qwerkeys"
 APP="Qwerkeys.app"
 
-[[ -x "$BIN" ]] || { echo "error: $BIN not found — run 'cargo build --release' first" >&2; exit 1; }
+# A `-debug` suffix selects the debug binary; everything else uses release.
+case "$VERSION" in
+  *-debug) BIN="target/debug/qwerkeys" ;;
+  *) BIN="target/release/qwerkeys" ;;
+esac
+
+[[ -x "$BIN" ]] || { echo "error: $BIN not found — build it first" >&2; exit 1; }
 [[ -f "packaging/Info.plist" ]] || { echo "error: packaging/Info.plist not found" >&2; exit 1; }
 
-echo "Bundling Qwerkeys version: $VERSION"
+echo "Bundling Qwerkeys version: $VERSION (bin: $BIN)"
 
 # --- Stage the .app bundle ---------------------------------------------------
 rm -rf "$APP" dmg-staging
