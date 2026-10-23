@@ -54,7 +54,8 @@ cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
   "$APP/Contents/Info.plist"
 
 cp "$BIN" "$APP/Contents/MacOS/qwerkeys"
-codesign --force --deep --sign - "$APP"
+BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Contents/Info.plist")
+codesign --force --deep --sign - --requirements "=designated => identifier \"$BUNDLE_ID\"" "$APP"
 echo "✓ Staged and signed $APP"
 
 # --- Build the DMG -----------------------------------------------------------
@@ -68,4 +69,5 @@ hdiutil create -volname "Qwerkeys" \
   -srcfolder dmg-staging \
   -ov -format UDZO \
   "$DMG"
+rm -rf dmg-staging
 echo "✓ Created $DMG"

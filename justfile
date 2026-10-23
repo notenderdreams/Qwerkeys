@@ -68,11 +68,13 @@ reset-permissions:
 install version="v0.0.0-dev": (bundle version)
     @rm -rf /Applications/Qwerkeys.app
     @cp -R Qwerkeys.app /Applications/Qwerkeys.app
+    @/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u Qwerkeys.app 2>/dev/null || true
+    @rm -rf Qwerkeys.app dmg-staging
     @version="{{version}}"; echo "✓ Installed /Applications/Qwerkeys.app"; \
-        echo "  DMG kept in repo: Qwerkeys-${version#v}.dmg"    
+        echo "  DMG kept in repo: Qwerkeys-${version#v}.dmg"
 
-# Reset privacy grants, then install the DEBUG build (bundled .app always shows onboarding)
-install-debug: reset-permissions (install "v0.0.0-debug")
+# Install the DEBUG build, then reset privacy grants so next launch triggers fresh permission prompt
+install-debug: (install "v0.0.0-debug") reset-permissions
 
 # Clean build target, bundle outputs, and generated icons
 clean:
