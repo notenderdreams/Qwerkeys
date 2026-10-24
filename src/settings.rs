@@ -22,6 +22,7 @@ pub struct Settings {
     pub velocity: u8,
     pub show_unmapped_note_names: bool,
     pub onboarding_completed: bool,
+    pub auto_check_updates: bool,
 }
 
 impl Default for Settings {
@@ -36,6 +37,7 @@ impl Default for Settings {
             velocity: 100,
             show_unmapped_note_names: true,
             onboarding_completed: false,
+            auto_check_updates: true,
         }
     }
 }
@@ -121,6 +123,7 @@ fn parse(text: &str) -> Settings {
             }
             "show_unmapped" => s.show_unmapped_note_names = value == "1",
             "onboarding_completed" => s.onboarding_completed = value == "1",
+            "auto_check_updates" => s.auto_check_updates = value == "1",
             _ => {}
         }
     }
@@ -137,7 +140,7 @@ pub fn save(s: &Settings) {
     };
 
     let body = format!(
-        "theme={}\nroot={}\nscale={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\n",
+        "theme={}\nroot={}\nscale={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\nauto_check_updates={}\n",
         s.theme as usize,
         s.root as usize,
         s.scale as usize,
@@ -147,6 +150,7 @@ pub fn save(s: &Settings) {
         s.velocity,
         u8::from(s.show_unmapped_note_names),
         u8::from(s.onboarding_completed),
+        u8::from(s.auto_check_updates),
     );
 
     use std::io::Write;
@@ -179,10 +183,11 @@ mod tests {
             velocity: 64,
             show_unmapped_note_names: false,
             onboarding_completed: true,
+            auto_check_updates: true,
         };
 
         let body = format!(
-            "theme={}\nroot={}\nscale={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\n",
+            "theme={}\nroot={}\nscale={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\nauto_check_updates={}\n",
             s.theme as usize,
             s.root as usize,
             s.scale as usize,
@@ -192,6 +197,7 @@ mod tests {
             s.velocity,
             u8::from(s.show_unmapped_note_names),
             u8::from(s.onboarding_completed),
+            u8::from(s.auto_check_updates),
         );
 
         let parsed = parse(&body);
@@ -204,6 +210,7 @@ mod tests {
         assert_eq!(parsed.velocity, s.velocity);
         assert_eq!(parsed.show_unmapped_note_names, s.show_unmapped_note_names);
         assert_eq!(parsed.onboarding_completed, s.onboarding_completed);
+        assert_eq!(parsed.auto_check_updates, s.auto_check_updates);
     }
 
     #[test]
@@ -216,5 +223,17 @@ mod tests {
         assert_eq!(parsed.scale, d.scale);
         assert_eq!(parsed.layout_preset, d.layout_preset);
         assert_eq!(parsed.velocity, 127);
+    }
+
+    #[test]
+    fn test_auto_check_updates_roundtrip() {
+        let s = Settings::default();
+        assert!(s.auto_check_updates);
+
+        let parsed = parse("auto_check_updates=0\n");
+        assert!(!parsed.auto_check_updates);
+
+        let parsed2 = parse("auto_check_updates=1\n");
+        assert!(parsed2.auto_check_updates);
     }
 }

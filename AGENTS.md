@@ -39,7 +39,7 @@ src/
     ├── onboarding.rs — first-run permission grant flow
     ├── keyboard.rs   — visual keyboard display
     ├── piano.rs      — piano roll / note visualization
-    ├── bottom_bar.rs — status bar
+    ├── status_bar.rs — status bar
     ├── setup_bar.rs  — device/scale/octave controls
     ├── settings.rs   — settings panel UI
     └── theme.rs      — egui visual theme
@@ -59,7 +59,8 @@ src/
 
 | Task | Command |
 |------|---------|
-| Dev run | `just dev` |
+| Run debug | `just run` |
+| Fake update server | `just fake-update-server` |
 | Build debug | `just build` |
 | Install debug + reset perms | `just install-debug` |
 | Reset TCC only | `just reset-permissions` |

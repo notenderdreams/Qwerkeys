@@ -2,17 +2,17 @@
 default:
     @just --list
 
-# Run in development mode
-dev *args:
+# Run debug build
+run *args:
     cargo run -- {{args}}
 
 # Run and auto-rebuild on file changes (requires `cargo install cargo-watch`)
 watch *args:
     cargo watch -x "run -- {{args}}"
 
-# Run release build
-run *args:
-    cargo run --release -- {{args}}
+# Run fake GitHub update server for testing
+fake-update-server:
+    ./scripts/fake_update_server.py
 
 # Type-check without building binary
 check:

@@ -1,9 +1,9 @@
-pub mod bottom_bar;
 pub mod keyboard;
 pub mod onboarding;
 pub mod piano;
 pub mod settings;
 pub mod setup_bar;
+pub mod status_bar;
 pub mod theme;
 
 use std::sync::Arc;
@@ -42,6 +42,7 @@ pub struct QwerkeysApp {
     pub(super) start_listener: Option<Box<dyn FnOnce() + Send>>,
     pub(super) permissions_reset_at: Option<std::time::Instant>,
     pub(super) permissions_reset_done: bool,
+    pub(super) updater: Arc<std::sync::Mutex<crate::updater::UpdateState>>,
 }
 
 impl QwerkeysApp {
@@ -72,7 +73,6 @@ impl QwerkeysApp {
             .find(|t| *t as usize == state.theme_index.load(Ordering::SeqCst))
             .unwrap_or_default();
         let theme_colors = current_theme.colors();
-
         cc.egui_ctx.set_visuals(current_theme.egui_visuals());
 
         let onboarding_done = crate::permissions::is_onboarding_done(
@@ -80,6 +80,11 @@ impl QwerkeysApp {
             crate::permissions::accessibility_granted(),
             state.onboarding_completed.load(Ordering::SeqCst),
         );
+
+        let updater = Arc::new(std::sync::Mutex::new(crate::updater::UpdateState::default()));
+        if state.auto_check_updates.load(Ordering::SeqCst) {
+            crate::updater::check_for_updates_async(updater.clone(), cc.egui_ctx.clone());
+        }
 
         Self {
             state,
@@ -98,6 +103,7 @@ impl QwerkeysApp {
             start_listener,
             permissions_reset_at: None,
             permissions_reset_done: false,
+            updater,
         }
     }
 
@@ -153,12 +159,12 @@ impl eframe::App for QwerkeysApp {
                     .inner_margin(Margin {
                         left: 18,
                         right: 18,
-                        top: 3,
-                        bottom: 3,
+                        top: 4,
+                        bottom: 4,
                     }),
             )
             .show(ui, |ui| {
-                self.render_bottom_bar(ui);
+                self.render_status_bar(ui);
             });
 
         self.render_settings_window(&ctx);

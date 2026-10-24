@@ -12,4 +12,5 @@ pub(crate) mod scale;
 pub(crate) mod settings;
 pub(crate) mod state;
 pub(crate) mod ui;
+pub(crate) mod updater;
 pub(crate) mod utils;

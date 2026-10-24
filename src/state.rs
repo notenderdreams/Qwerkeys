@@ -20,6 +20,7 @@ pub struct AppState {
     pub sustain_held: AtomicBool,
     pub show_unmapped_note_names: AtomicBool,
     pub onboarding_completed: AtomicBool,
+    pub auto_check_updates: AtomicBool,
 
     /// Discriminant of the active [`AppTheme`], kept here so settings
     /// changes can be persisted from a single chokepoint.
@@ -51,6 +52,7 @@ impl AppState {
             sustain_held: AtomicBool::new(false),
             show_unmapped_note_names: AtomicBool::new(s.show_unmapped_note_names),
             onboarding_completed: AtomicBool::new(s.onboarding_completed),
+            auto_check_updates: AtomicBool::new(s.auto_check_updates),
             theme_index: AtomicUsize::new(s.theme as usize),
 
             devices: Mutex::new(Vec::new()),
@@ -98,6 +100,7 @@ impl AppState {
             velocity: self.velocity.load(Ordering::SeqCst),
             show_unmapped_note_names: self.get_show_unmapped_note_names(),
             onboarding_completed: self.onboarding_completed.load(Ordering::SeqCst),
+            auto_check_updates: self.auto_check_updates.load(Ordering::SeqCst),
         });
     }
 

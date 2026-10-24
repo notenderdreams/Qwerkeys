@@ -10,3 +10,6 @@ dmg-staging
 
 # graphify internals
 graphify-out/
+
+# Local scratch / test files
+.tmp/
