@@ -121,10 +121,10 @@ pub fn find_matching_asset<'a>(
     assets.iter().find(|a| a.name == expected_name)
 }
 
-pub fn generate_swap_script(pid: u32, staged: &Path, target: &Path) -> String {
+pub fn generate_swap_script(pid: u32, staged: &Path, target: &Path, temp_dir: &Path) -> String {
     let staged_str = staged.to_string_lossy();
     let target_str = target.to_string_lossy();
-    let parent_staged = staged.parent().unwrap_or(staged).to_string_lossy();
+    let temp_dir_str = temp_dir.to_string_lossy();
 
     format!(
         r#"#!/bin/sh
@@ -134,7 +134,7 @@ done
 xattr -r -d com.apple.quarantine "{staged_str}" 2>/dev/null || true
 rm -rf "{target_str}"
 cp -R "{staged_str}" "{target_str}"
-rm -rf "{parent_staged}"
+rm -rf "{temp_dir_str}"
 open "{target_str}"
 "#
     )
@@ -326,15 +326,19 @@ pub fn download_and_install_async(state: Arc<Mutex<UpdateState>>, ctx: egui::Con
             .output();
 
         match ditto {
-            Ok(output) if output.status.success() => {}
+            Ok(output) if output.status.success() => {
+                let _ = fs::remove_file(&zip_path);
+            }
             Ok(output) => {
                 let err = String::from_utf8_lossy(&output.stderr);
+                let _ = fs::remove_dir_all(&temp_dir);
                 let mut s = state.lock().unwrap();
                 s.status = UpdateStatus::Error(format!("Extraction error: {err}"));
                 ctx.request_repaint();
                 return;
             }
             Err(e) => {
+                let _ = fs::remove_dir_all(&temp_dir);
                 let mut s = state.lock().unwrap();
                 s.status = UpdateStatus::Error(format!("Failed to run ditto: {e}"));
                 ctx.request_repaint();
@@ -344,6 +348,7 @@ pub fn download_and_install_async(state: Arc<Mutex<UpdateState>>, ctx: egui::Con
 
         let staged_app = staged_dir.join("Qwerkeys.app");
         if !staged_app.exists() {
+            let _ = fs::remove_dir_all(&temp_dir);
             let mut s = state.lock().unwrap();
             s.status = UpdateStatus::Error("Archive did not contain Qwerkeys.app".into());
             ctx.request_repaint();
@@ -358,7 +363,7 @@ pub fn download_and_install_async(state: Arc<Mutex<UpdateState>>, ctx: egui::Con
         };
 
         let pid = std::process::id();
-        let script_content = generate_swap_script(pid, &staged_app, &target_app);
+        let script_content = generate_swap_script(pid, &staged_app, &target_app, &temp_dir);
         let script_path = temp_dir.join("swap.sh");
 
         if let Err(e) = fs::write(&script_path, script_content) {
@@ -472,14 +477,16 @@ mod tests {
         use std::path::Path;
         let script = generate_swap_script(
             1234,
-            Path::new("/tmp/staged/Qwerkeys.app"),
+            Path::new("/tmp/qwerkeys-update/staged/Qwerkeys.app"),
             Path::new("/Applications/Qwerkeys.app"),
+            Path::new("/tmp/qwerkeys-update"),
         );
         assert!(script.contains("while kill -0 1234 2>/dev/null; do"));
         assert!(script.contains("xattr -r -d com.apple.quarantine"));
-        assert!(
-            script.contains("cp -R \"/tmp/staged/Qwerkeys.app\" \"/Applications/Qwerkeys.app\"")
-        );
+        assert!(script.contains(
+            "cp -R \"/tmp/qwerkeys-update/staged/Qwerkeys.app\" \"/Applications/Qwerkeys.app\""
+        ));
+        assert!(script.contains("rm -rf \"/tmp/qwerkeys-update\""));
         assert!(script.contains("open \"/Applications/Qwerkeys.app\""));
     }
 }
