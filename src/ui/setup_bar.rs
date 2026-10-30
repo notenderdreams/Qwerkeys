@@ -371,10 +371,8 @@ impl QwerkeysApp {
 
                             if ui.add(btn).clicked() {
                                 if is_sel {
-                                    // Clicking the selected root toggles the scale off.
-                                    if scale_enabled {
-                                        self.state.set_scale_enabled(false);
-                                    }
+                                    // Clicking the selected root toggles the scale on/off.
+                                    self.state.set_scale_enabled(!scale_enabled);
                                 } else {
                                     self.state.set_root(root);
                                     // Picking a root re-enables the scale.
@@ -442,10 +440,8 @@ impl QwerkeysApp {
                             let resp = ui.add(btn);
                             if resp.clicked() {
                                 if is_sel {
-                                    // Clicking the selected scale toggles it off.
-                                    if scale_enabled {
-                                        self.state.set_scale_enabled(false);
-                                    }
+                                    // Clicking the selected scale toggles it on/off.
+                                    self.state.set_scale_enabled(!scale_enabled);
                                 } else {
                                     self.state.set_scale(st);
                                     // Picking a scale re-enables the scale.
@@ -487,10 +483,8 @@ impl QwerkeysApp {
                                 .clicked()
                             {
                                 if st == current_scale {
-                                    // Picking the selected scale toggles it off.
-                                    if scale_enabled {
-                                        self.state.set_scale_enabled(false);
-                                    }
+                                    // Picking the selected scale toggles it on/off.
+                                    self.state.set_scale_enabled(!scale_enabled);
                                 } else {
                                     self.state.set_scale(st);
                                     // Picking a scale re-enables the scale.
