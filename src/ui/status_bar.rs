@@ -15,25 +15,25 @@ impl QwerkeysApp {
             // Port on far left, vertically centered
             ui.label(
                 RichText::new("PORT: qwerkeys-input")
-                    .font(FontId::monospace(11.0))
+                    .font(FontId::monospace(9.5))
                     .strong()
-                    .color(theme.TEXT_SECONDARY),
+                    .color(theme.TEXT_MUTED),
             );
 
             ui.separator();
 
             ui.label(
                 RichText::new("STATUS:")
-                    .font(FontId::monospace(11.0))
+                    .font(FontId::monospace(9.5))
                     .strong()
-                    .color(theme.TEXT_SECONDARY),
+                    .color(theme.TEXT_MUTED),
             );
 
             ui.label(
                 RichText::new(&event_info)
-                    .font(FontId::monospace(12.0))
+                    .font(FontId::monospace(9.5))
                     .strong()
-                    .color(theme.TEXT_PRIMARY),
+                    .color(theme.TEXT_MUTED),
             );
 
             // Right side: version & auto-updater controls anchored to far right
@@ -53,7 +53,7 @@ impl QwerkeysApp {
                             let resp = ui.add(
                                 egui::Label::new(
                                     RichText::new(ver_text)
-                                        .font(FontId::monospace(9.0))
+                                        .font(FontId::monospace(9.5))
                                         .strong()
                                         .color(theme.TEXT_MUTED),
                                 )
@@ -70,16 +70,20 @@ impl QwerkeysApp {
                             }
                         }
                         crate::updater::UpdateStatus::Checking => {
+                            // Version stays pinned in position; the checking
+                            // note appears to its left (right_to_left layout).
                             ui.label(
-                                RichText::new(format!(
-                                    "version {} (checking...)",
-                                    env!("CARGO_PKG_VERSION")
-                                ))
-                                .font(FontId::monospace(9.0))
-                                .strong()
-                                .color(theme.TEXT_MUTED),
+                                RichText::new(format!("version {}", env!("CARGO_PKG_VERSION")))
+                                    .font(FontId::monospace(9.5))
+                                    .strong()
+                                    .color(theme.TEXT_MUTED),
                             );
-                            ui.spinner();
+                            ui.label(
+                                RichText::new("(checking...)")
+                                    .font(FontId::monospace(9.5))
+                                    .strong()
+                                    .color(theme.TEXT_MUTED),
+                            );
                         }
                         crate::updater::UpdateStatus::Available {
                             ref version,
@@ -126,7 +130,7 @@ impl QwerkeysApp {
                                 mb_tot,
                                 progress * 100.0
                             );
-                            let font = FontId::monospace(9.0);
+                            let font = FontId::monospace(9.5);
 
                             // Slot sized to the WIDEST possible text for this download, so the
                             // slot never changes width. If its width followed the live text,
@@ -163,18 +167,17 @@ impl QwerkeysApp {
                                 ProgressBar::new(progress)
                                     .fill(theme.SAGE_ACCENT)
                                     .desired_width(180.0)
-                                    .desired_height(8.0),
+                                    .desired_height(6.0),
                             )
                             .on_hover_text(format!("Downloading version {version}..."));
                         }
                         crate::updater::UpdateStatus::Extracting => {
                             ui.label(
                                 RichText::new("Extracting...")
-                                    .font(FontId::monospace(9.0))
+                                    .font(FontId::monospace(9.5))
                                     .strong()
                                     .color(theme.SAGE_ACCENT),
                             );
-                            ui.spinner();
                         }
                         crate::updater::UpdateStatus::ReadyToRestart {
                             ref version,
@@ -198,7 +201,7 @@ impl QwerkeysApp {
                         crate::updater::UpdateStatus::DevBuildSkipped { ref version } => {
                             ui.label(
                                 RichText::new(format!("version {version} ready (dev build)"))
-                                    .font(FontId::monospace(9.0))
+                                    .font(FontId::monospace(9.5))
                                     .strong()
                                     .color(theme.TEXT_MUTED),
                             );
@@ -207,7 +210,7 @@ impl QwerkeysApp {
                             let resp = ui.add(
                                 egui::Label::new(
                                     RichText::new("Update failed (retry)")
-                                        .font(FontId::monospace(9.0))
+                                        .font(FontId::monospace(9.5))
                                         .strong()
                                         .color(Color32::from_rgb(235, 87, 87)),
                                 )

@@ -159,8 +159,8 @@ impl eframe::App for QwerkeysApp {
                     .inner_margin(Margin {
                         left: 18,
                         right: 18,
-                        top: 4,
-                        bottom: 4,
+                        top: 2,
+                        bottom: 2,
                     }),
             )
             .show(ui, |ui| {
