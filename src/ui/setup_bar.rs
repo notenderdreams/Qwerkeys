@@ -279,6 +279,7 @@ impl QwerkeysApp {
         let theme = self.theme_colors;
         let current_root = self.state.get_root();
         let current_scale = self.state.get_scale();
+        let scale_enabled = self.state.get_scale_enabled();
 
         ui.horizontal(|ui| {
             ui.label(
@@ -288,22 +289,43 @@ impl QwerkeysApp {
                     .color(theme.TEXT_HEADING),
             );
 
-            Frame::NONE
-                .fill(theme.SAGE_BADGE_BG)
-                .stroke(Stroke::new(1.0, theme.SAGE_BORDER))
-                .corner_radius(CornerRadius::same(3))
-                .inner_margin(Margin::symmetric(6, 2))
-                .show(ui, |ui| {
-                    ui.label(
-                        RichText::new(
-                            format!("{} {}", current_root.name(), current_scale.name())
-                                .to_uppercase(),
-                        )
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let (txt, txt_color, bg, border) = if scale_enabled {
+                    (
+                        "SCALE ON",
+                        theme.SAGE_BADGE_TXT,
+                        theme.SAGE_BADGE_BG,
+                        theme.SAGE_BORDER,
+                    )
+                } else {
+                    ("SCALE OFF", theme.TEXT_MUTED, theme.BG_BUTTON, theme.BORDER_GRID)
+                };
+
+                let toggle = egui::Button::new(
+                    RichText::new(txt)
                         .font(FontId::monospace(8.5))
                         .strong()
-                        .color(theme.SAGE_BADGE_TXT),
-                    );
-                });
+                        .color(txt_color),
+                )
+                .fill(bg)
+                .stroke(Stroke::new(1.0, border))
+                .corner_radius(CornerRadius::same(3))
+                .min_size(vec2(64.0, 18.0));
+
+                let response = ui.add(toggle);
+                if response.clicked() {
+                    self.state.set_scale_enabled(!scale_enabled);
+                }
+                if scale_enabled {
+                    response
+                        .on_hover_text("Scale filtering is ON. Click to disable — every semitone becomes playable")
+                        .on_hover_cursor(egui::CursorIcon::PointingHand);
+                } else {
+                    response
+                        .on_hover_text("Scale filtering is OFF: all notes are playable. Click to re-enable the scale")
+                        .on_hover_cursor(egui::CursorIcon::PointingHand);
+                }
+            });
         });
 
         ui.add_space(6.0);
@@ -324,29 +346,30 @@ impl QwerkeysApp {
                         ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
                         for &root in row {
                             let is_sel = root == current_root;
+                            // When scale is off, the selection reads washed-out to signal disabled.
+                            let (txt_col, fill, border) = if is_sel {
+                                if scale_enabled {
+                                    (
+                                        theme.SAGE_SELECTED_TXT,
+                                        theme.SAGE_SELECTED_BG,
+                                        theme.SAGE_SELECTED_BG,
+                                    )
+                                } else {
+                                    let bg = mix(theme.SAGE_SELECTED_BG, theme.BG_BUTTON, 0.65);
+                                    (theme.TEXT_LIGHT_MUTED, bg, bg)
+                                }
+                            } else {
+                                (theme.TEXT_LIGHT_MUTED, theme.BG_BUTTON, theme.BORDER_GRID)
+                            };
+
                             let btn_text = RichText::new(root.name())
                                 .font(FontId::monospace(9.0))
                                 .strong()
-                                .color(if is_sel {
-                                    theme.SAGE_SELECTED_TXT
-                                } else {
-                                    theme.TEXT_LIGHT_MUTED
-                                });
+                                .color(txt_col);
 
                             let btn = egui::Button::new(btn_text)
-                                .fill(if is_sel {
-                                    theme.SAGE_SELECTED_BG
-                                } else {
-                                    theme.BG_BUTTON
-                                })
-                                .stroke(Stroke::new(
-                                    1.0,
-                                    if is_sel {
-                                        theme.SAGE_SELECTED_BG
-                                    } else {
-                                        theme.BORDER_GRID
-                                    },
-                                ))
+                                .fill(fill)
+                                .stroke(Stroke::new(1.0, border))
                                 .corner_radius(CornerRadius::same(3))
                                 .min_size(vec2(28.0, 20.0));
 
@@ -383,6 +406,21 @@ impl QwerkeysApp {
                         ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
                         for st in row {
                             let is_sel = st == current_scale;
+                            // Washed-out selection when scale filtering is disabled.
+                            let (label_col, fill, border) = if is_sel {
+                                if scale_enabled {
+                                    (theme.SAGE_BADGE_TXT, theme.SAGE_BADGE_BG, theme.SAGE_BORDER)
+                                } else {
+                                    let bg = mix(theme.SAGE_BADGE_BG, theme.BG_BUTTON, 0.65);
+                                    (
+                                        theme.TEXT_LIGHT_MUTED,
+                                        bg,
+                                        mix(theme.SAGE_BORDER, theme.BG_BUTTON, 0.65),
+                                    )
+                                }
+                            } else {
+                                (theme.TEXT_LIGHT_MUTED, theme.BG_BUTTON, theme.BORDER_GRID)
+                            };
                             let label = match st {
                                 ScaleType::NaturalMinor => "Minor",
                                 ScaleType::Major => "Major",
@@ -393,27 +431,12 @@ impl QwerkeysApp {
                                 _ => st.name(),
                             };
                             let btn = egui::Button::new(
-                                RichText::new(label).font(FontId::monospace(8.5)).color(
-                                    if is_sel {
-                                        theme.SAGE_BADGE_TXT
-                                    } else {
-                                        theme.TEXT_LIGHT_MUTED
-                                    },
-                                ),
+                                RichText::new(label)
+                                    .font(FontId::monospace(8.5))
+                                    .color(label_col),
                             )
-                            .fill(if is_sel {
-                                theme.SAGE_BADGE_BG
-                            } else {
-                                theme.BG_BUTTON
-                            })
-                            .stroke(Stroke::new(
-                                1.0,
-                                if is_sel {
-                                    theme.SAGE_BORDER
-                                } else {
-                                    theme.BORDER_GRID
-                                },
-                            ))
+                            .fill(fill)
+                            .stroke(Stroke::new(1.0, border))
                             .corner_radius(CornerRadius::same(3))
                             .min_size(vec2(66.0, 20.0));
 
@@ -433,7 +456,11 @@ impl QwerkeysApp {
                         RichText::new(current_scale.name())
                             .font(FontId::proportional(10.5))
                             .strong()
-                            .color(theme.TEXT_PRIMARY),
+                            .color(if scale_enabled {
+                                theme.TEXT_PRIMARY
+                            } else {
+                                theme.TEXT_MUTED
+                            }),
                     )
                     .show_ui(ui, |ui| {
                         for st in ScaleType::ALL {

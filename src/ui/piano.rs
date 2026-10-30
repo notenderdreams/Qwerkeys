@@ -17,7 +17,7 @@ impl QwerkeysApp {
         let theme = self.theme_colors;
         let skin = KeySkin::from_light(self.current_theme.is_light());
         let root = self.state.get_root();
-        let scale = self.state.get_scale();
+        let scale = self.state.get_scale_map();
         let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
         let right_oct = self.state.right_base_octave.load(Ordering::SeqCst);
         let pad = self.state.mapping_padding.load(Ordering::SeqCst);
@@ -114,7 +114,7 @@ impl QwerkeysApp {
                         }
 
                         let is_active = self.state.is_note_active(note);
-                        let in_scale = scale.is_in_scale(root, note);
+                        let in_scale = scale.contains(root, note);
 
                         // Mac-style faces — state is encoded as clear brightness steps:
                         // mapped (lightest) > unmapped/darker > accent only for pressed
@@ -231,7 +231,7 @@ impl QwerkeysApp {
                             }
 
                             let is_active = self.state.is_note_active(note);
-                            let in_scale = scale.is_in_scale(root, note);
+                            let in_scale = scale.contains(root, note);
 
                             // Glossy dark mac keys — root plays no special role
                             let fill = if is_active {

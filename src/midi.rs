@@ -56,7 +56,7 @@ impl MidiEngine {
             }
 
             let root = self.state.get_root();
-            let scale = self.state.get_scale();
+            let scale = self.state.get_scale_map();
             let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
             let right_oct = self.state.right_base_octave.load(Ordering::SeqCst);
             let preset = self.state.get_layout_preset();

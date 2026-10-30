@@ -4,13 +4,14 @@ use std::sync::atomic::{AtomicBool, AtomicI8, AtomicU8, AtomicUsize, Ordering};
 
 use crate::iokit::KeyboardDevice;
 use crate::mapping::LayoutPreset;
-use crate::scale::{RootNote, ScaleType};
+use crate::scale::{RootNote, ScaleMap, ScaleType};
 use crate::settings;
 use crate::ui::AppTheme;
 
 pub struct AppState {
     pub root: Mutex<RootNote>,
     pub scale: Mutex<ScaleType>,
+    pub scale_enabled: AtomicBool,
     pub layout_preset: Mutex<LayoutPreset>,
     pub base_octave: AtomicI8,
     pub mapping_padding: AtomicI8,
@@ -43,6 +44,7 @@ impl AppState {
         Self {
             root: Mutex::new(s.root),
             scale: Mutex::new(s.scale),
+            scale_enabled: AtomicBool::new(s.scale_enabled),
             layout_preset: Mutex::new(s.layout_preset),
             base_octave: AtomicI8::new(s.base_octave),
             mapping_padding: AtomicI8::new(s.mapping_padding),
@@ -94,6 +96,7 @@ impl AppState {
             theme,
             root: self.get_root(),
             scale: self.get_scale(),
+            scale_enabled: self.get_scale_enabled(),
             layout_preset: self.get_layout_preset(),
             base_octave: self.base_octave.load(Ordering::SeqCst),
             mapping_padding: self.mapping_padding.load(Ordering::SeqCst),
@@ -122,6 +125,22 @@ impl AppState {
         *self.scale.lock().unwrap() = scale;
         self.request_repaint();
         self.persist();
+    }
+
+    pub fn get_scale_enabled(&self) -> bool {
+        self.scale_enabled.load(Ordering::SeqCst)
+    }
+
+    pub fn set_scale_enabled(&self, enabled: bool) {
+        self.scale_enabled.store(enabled, Ordering::SeqCst);
+        self.request_repaint();
+        self.persist();
+    }
+
+    /// Current scale mapping (the selected scale, or chromatic when "scale
+    /// off" is toggled — every semitone is then playable).
+    pub fn get_scale_map(&self) -> ScaleMap {
+        ScaleMap::new(self.get_scale(), !self.get_scale_enabled())
     }
 
     pub fn get_layout_preset(&self) -> LayoutPreset {

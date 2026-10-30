@@ -8,7 +8,7 @@ pub use keys::{
     hid_usage_to_mac_keycode,
 };
 
-use crate::scale::{RootNote, ScaleType, format_midi_note};
+use crate::scale::{RootNote, ScaleMap, format_midi_note};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LayoutPreset {
@@ -37,7 +37,7 @@ impl LayoutPreset {
 pub fn calculate_key_notes(
     key: &KeyMappingDef,
     root: RootNote,
-    scale: ScaleType,
+    scale: ScaleMap,
     left_base_octave: i8,
     right_base_octave: i8,
     preset: LayoutPreset,
@@ -50,7 +50,7 @@ pub fn calculate_key_notes(
                 HandSide::Right => right_base_octave,
             };
             let deg = key.degree_index as i32 - padding as i32;
-            vec![scale.get_midi_note_signed(root, base_octave, deg)]
+            vec![scale.midi_note(root, base_octave, deg)]
         }
         LayoutPreset::OctaveStacked => {
             let global_col = match key.hand {
@@ -63,7 +63,7 @@ pub fn calculate_key_notes(
             let deg = global_col as i32 - padding as i32;
             let row_oct_offset = (3 - key.row as i8).max(0);
             let oct = left_base_octave + row_oct_offset;
-            vec![scale.get_midi_note_signed(root, oct, deg)]
+            vec![scale.midi_note(root, oct, deg)]
         }
         LayoutPreset::LinearContinuous => {
             let row_base = match key.row {
@@ -80,7 +80,7 @@ pub fn calculate_key_notes(
                 },
             };
             let deg = row_base + global_col as i32 - padding as i32;
-            vec![scale.get_midi_note_signed(root, left_base_octave, deg)]
+            vec![scale.midi_note(root, left_base_octave, deg)]
         }
     }
 }
@@ -88,7 +88,7 @@ pub fn calculate_key_notes(
 pub fn get_key_display_info(
     key: &KeyMappingDef,
     root: RootNote,
-    scale: ScaleType,
+    scale: ScaleMap,
     left_base_octave: i8,
     right_base_octave: i8,
     preset: LayoutPreset,
@@ -104,13 +104,14 @@ pub fn get_key_display_info(
         padding,
     );
     let primary_note = notes.first().copied().unwrap_or(60);
-    let is_root = scale.is_root(root, primary_note);
+    // In chromatic mode (scale off) root keys look like every other key.
+    let is_root = !scale.chromatic && scale.is_root(root, primary_note);
 
     match preset {
         LayoutPreset::LinearSplit => {
             let note_str = format_midi_note(primary_note);
             let deg = key.degree_index as i32 - padding as i32;
-            let degree = scale.degree_label_signed(deg).to_string();
+            let degree = scale.degree_label(deg).to_string();
             (note_str, degree, is_root)
         }
         LayoutPreset::OctaveStacked => {
@@ -123,7 +124,7 @@ pub fn get_key_display_info(
                 },
             };
             let deg = global_col as i32 - padding as i32;
-            let degree = scale.degree_label_signed(deg).to_string();
+            let degree = scale.degree_label(deg).to_string();
             (note_str, degree, is_root)
         }
         LayoutPreset::LinearContinuous => {
@@ -142,7 +143,7 @@ pub fn get_key_display_info(
                 },
             };
             let deg = row_base + global_col as i32 - padding as i32;
-            let degree = scale.degree_label_signed(deg).to_string();
+            let degree = scale.degree_label(deg).to_string();
             (note_str, degree, is_root)
         }
     }
@@ -151,6 +152,7 @@ pub fn get_key_display_info(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scale::{ScaleMap, ScaleType};
 
     #[test]
     fn test_two_hand_split_counts() {
@@ -220,7 +222,7 @@ mod tests {
     #[test]
     fn test_preset_linear_continuous_strictly_ascending() {
         let root = RootNote::C;
-        let scale = ScaleType::Major;
+        let scale = ScaleMap::from(ScaleType::Major);
         let left_oct = 2;
         let right_oct = 4;
         let preset = LayoutPreset::LinearContinuous;
@@ -262,7 +264,7 @@ mod tests {
         let key_1 = find_key_by_label("1").unwrap(); // row 0, col 0
 
         let root = RootNote::C;
-        let scale = ScaleType::Major;
+        let scale = ScaleMap::from(ScaleType::Major);
         let left_oct = 2;
         let right_oct = 4;
         let preset = LayoutPreset::OctaveStacked;
@@ -281,7 +283,7 @@ mod tests {
     #[test]
     fn test_mapping_padding_shifts_degrees() {
         let root = RootNote::C;
-        let scale = ScaleType::Major;
+        let scale = ScaleMap::from(ScaleType::Major);
         let left_oct = 3;
         let right_oct = 4;
         let preset = LayoutPreset::LinearSplit;

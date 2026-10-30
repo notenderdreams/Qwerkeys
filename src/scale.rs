@@ -171,6 +171,72 @@ impl ScaleType {
     }
 }
 
+/// A scale selection plus the "scale off" (chromatic) mode.
+///
+/// When chromatic is set, degrees map to consecutive semitones — every note
+/// is present and playable regardless of the selected scale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScaleMap {
+    pub scale: ScaleType,
+    pub chromatic: bool,
+}
+
+impl ScaleMap {
+    pub fn new(scale: ScaleType, chromatic: bool) -> Self {
+        Self { scale, chromatic }
+    }
+
+    pub fn midi_note(&self, root: RootNote, base_octave: i8, degree: i32) -> u8 {
+        if self.chromatic {
+            let octave_shift = degree.div_euclid(12);
+            let semitones = degree.rem_euclid(12);
+            let total_octave = base_octave + octave_shift as i8;
+            let note = (total_octave + 1) as i16 * 12 + root.semitone() as i16 + semitones as i16;
+            note.clamp(0, 127) as u8
+        } else {
+            self.scale.get_midi_note_signed(root, base_octave, degree)
+        }
+    }
+
+    pub fn degree_label(&self, degree: i32) -> &'static str {
+        if self.chromatic {
+            chromatic_degree_label(degree)
+        } else {
+            self.scale.degree_label_signed(degree)
+        }
+    }
+
+    pub fn contains(&self, root: RootNote, note: u8) -> bool {
+        if self.chromatic {
+            true
+        } else {
+            self.scale.is_in_scale(root, note)
+        }
+    }
+
+    pub fn is_root(&self, root: RootNote, note: u8) -> bool {
+        self.scale.is_root(root, note)
+    }
+}
+
+impl From<ScaleType> for ScaleMap {
+    fn from(scale: ScaleType) -> Self {
+        Self {
+            scale,
+            chromatic: false,
+        }
+    }
+}
+
+/// Interval names for consecutive semitones away from the root.
+pub fn chromatic_degree_label(degree: i32) -> &'static str {
+    let labels: &'static [&'static str] = &[
+        "Root", "m2nd", "2nd", "m3rd", "3rd", "4th", "b5th", "5th", "m6th", "6th", "m7th", "7th",
+    ];
+    let step = degree.rem_euclid(labels.len() as i32) as usize;
+    labels[step]
+}
+
 pub fn format_midi_note(note: u8) -> String {
     let names = [
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
@@ -215,5 +281,36 @@ mod tests {
 
         // Degree 5 = 1 octave wrap -> A3 (57)
         assert_eq!(scale.get_midi_note_signed(root, 2, 5), 57); // A3
+    }
+
+    #[test]
+    fn test_chromatic_scale_map() {
+        let root = RootNote::C;
+        let scale = ScaleType::Major;
+        let chroma = ScaleMap::new(scale, true);
+
+        // With scale off, consecutive degrees are consecutive semitones:
+        // C2 base -> degree 0 = C2 (36), degree 1 = C#2 (37), degree 2 = D2 (38).
+        assert_eq!(chroma.midi_note(root, 2, 0), 36);
+        assert_eq!(chroma.midi_note(root, 2, 1), 37);
+        assert_eq!(chroma.midi_note(root, 2, 2), 38);
+
+        // Degree 12 wraps one octave up to C3.
+        assert_eq!(chroma.midi_note(root, 2, 12), 48);
+
+        // Every note is playable and degree labels use chromatic interval names.
+        for note in 0..=127 {
+            assert!(chroma.contains(root, note));
+        }
+        assert_eq!(chroma.degree_label(0), "Root");
+        assert_eq!(chroma.degree_label(1), "m2nd");
+        assert_eq!(chroma.degree_label(7), "5th");
+        assert_eq!(chroma.degree_label(-1), "7th");
+
+        // Non-chromatic map keeps the scale's behavior.
+        let tonal = ScaleMap::new(scale, false);
+        assert_ne!(tonal.midi_note(root, 2, 1), 37);
+        assert!(!tonal.contains(root, 37)); // C# not in C major
+        assert!(tonal.contains(root, 38));
     }
 }

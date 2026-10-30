@@ -16,6 +16,7 @@ pub struct Settings {
     pub theme: AppTheme,
     pub root: RootNote,
     pub scale: ScaleType,
+    pub scale_enabled: bool,
     pub layout_preset: LayoutPreset,
     pub base_octave: i8,
     pub mapping_padding: i8,
@@ -31,6 +32,7 @@ impl Default for Settings {
             theme: AppTheme::default(),
             root: RootNote::C,
             scale: ScaleType::NaturalMinor,
+            scale_enabled: true,
             layout_preset: LayoutPreset::LinearSplit,
             base_octave: 4,
             mapping_padding: 0,
@@ -96,6 +98,7 @@ fn parse(text: &str) -> Settings {
                     s.scale = scale;
                 }
             }
+            "scale_enabled" => s.scale_enabled = value == "1",
             "layout" => {
                 if let Ok(idx) = value.parse::<usize>()
                     && let Some(preset) = LayoutPreset::ALL
@@ -140,10 +143,11 @@ pub fn save(s: &Settings) {
     };
 
     let body = format!(
-        "theme={}\nroot={}\nscale={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\nauto_check_updates={}\n",
+        "theme={}\nroot={}\nscale={}\nscale_enabled={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\nauto_check_updates={}\n",
         s.theme as usize,
         s.root as usize,
         s.scale as usize,
+        u8::from(s.scale_enabled),
         s.layout_preset as usize,
         s.base_octave,
         s.mapping_padding,
@@ -177,6 +181,7 @@ mod tests {
             theme: AppTheme::Sage,
             root: RootNote::D,
             scale: ScaleType::Blues,
+            scale_enabled: false,
             layout_preset: LayoutPreset::LinearContinuous,
             base_octave: 2,
             mapping_padding: -3,
@@ -187,10 +192,11 @@ mod tests {
         };
 
         let body = format!(
-            "theme={}\nroot={}\nscale={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\nauto_check_updates={}\n",
+            "theme={}\nroot={}\nscale={}\nscale_enabled={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\nauto_check_updates={}\n",
             s.theme as usize,
             s.root as usize,
             s.scale as usize,
+            u8::from(s.scale_enabled),
             s.layout_preset as usize,
             s.base_octave,
             s.mapping_padding,
@@ -204,6 +210,7 @@ mod tests {
         assert_eq!(parsed.theme, s.theme);
         assert_eq!(parsed.root, s.root);
         assert_eq!(parsed.scale, s.scale);
+        assert_eq!(parsed.scale_enabled, s.scale_enabled);
         assert_eq!(parsed.layout_preset, s.layout_preset);
         assert_eq!(parsed.base_octave, s.base_octave);
         assert_eq!(parsed.mapping_padding, s.mapping_padding);

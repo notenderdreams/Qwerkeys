@@ -562,7 +562,7 @@ impl QwerkeysApp {
         let theme = self.theme_colors;
         let skin = KeySkin::from_light(self.current_theme.is_light());
         let root = self.state.get_root();
-        let scale = self.state.get_scale();
+        let scale = self.state.get_scale_map();
         let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
         let right_oct = self.state.right_base_octave.load(Ordering::SeqCst);
         let preset = self.state.get_layout_preset();
