@@ -346,18 +346,14 @@ impl QwerkeysApp {
                         ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
                         for &root in row {
                             let is_sel = root == current_root;
-                            // When scale is off, the selection reads washed-out to signal disabled.
-                            let (txt_col, fill, border) = if is_sel {
-                                if scale_enabled {
-                                    (
-                                        theme.SAGE_SELECTED_TXT,
-                                        theme.SAGE_SELECTED_BG,
-                                        theme.SAGE_SELECTED_BG,
-                                    )
-                                } else {
-                                    let bg = mix(theme.SAGE_SELECTED_BG, theme.BG_BUTTON, 0.65);
-                                    (theme.TEXT_LIGHT_MUTED, bg, bg)
-                                }
+                            // When scale is off, selected buttons render exactly
+                            // like plain ones — no tint, no highlight.
+                            let (txt_col, fill, border) = if is_sel && scale_enabled {
+                                (
+                                    theme.SAGE_SELECTED_TXT,
+                                    theme.SAGE_SELECTED_BG,
+                                    theme.SAGE_SELECTED_BG,
+                                )
                             } else {
                                 (theme.TEXT_LIGHT_MUTED, theme.BG_BUTTON, theme.BORDER_GRID)
                             };
@@ -374,7 +370,18 @@ impl QwerkeysApp {
                                 .min_size(vec2(28.0, 20.0));
 
                             if ui.add(btn).clicked() {
-                                self.state.set_root(root);
+                                if is_sel {
+                                    // Clicking the selected root toggles the scale off.
+                                    if scale_enabled {
+                                        self.state.set_scale_enabled(false);
+                                    }
+                                } else {
+                                    self.state.set_root(root);
+                                    // Picking a root re-enables the scale.
+                                    if !scale_enabled {
+                                        self.state.set_scale_enabled(true);
+                                    }
+                                }
                             }
                         }
                     });
@@ -406,18 +413,10 @@ impl QwerkeysApp {
                         ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
                         for st in row {
                             let is_sel = st == current_scale;
-                            // Washed-out selection when scale filtering is disabled.
-                            let (label_col, fill, border) = if is_sel {
-                                if scale_enabled {
-                                    (theme.SAGE_BADGE_TXT, theme.SAGE_BADGE_BG, theme.SAGE_BORDER)
-                                } else {
-                                    let bg = mix(theme.SAGE_BADGE_BG, theme.BG_BUTTON, 0.65);
-                                    (
-                                        theme.TEXT_LIGHT_MUTED,
-                                        bg,
-                                        mix(theme.SAGE_BORDER, theme.BG_BUTTON, 0.65),
-                                    )
-                                }
+                            // When scale is off, selected scales render exactly
+                            // like plain ones — no tint, no highlight.
+                            let (label_col, fill, border) = if is_sel && scale_enabled {
+                                (theme.SAGE_BADGE_TXT, theme.SAGE_BADGE_BG, theme.SAGE_BORDER)
                             } else {
                                 (theme.TEXT_LIGHT_MUTED, theme.BG_BUTTON, theme.BORDER_GRID)
                             };
@@ -440,8 +439,20 @@ impl QwerkeysApp {
                             .corner_radius(CornerRadius::same(3))
                             .min_size(vec2(66.0, 20.0));
 
-                            if ui.add(btn).clicked() {
-                                self.state.set_scale(st);
+                            let resp = ui.add(btn);
+                            if resp.clicked() {
+                                if is_sel {
+                                    // Clicking the selected scale toggles it off.
+                                    if scale_enabled {
+                                        self.state.set_scale_enabled(false);
+                                    }
+                                } else {
+                                    self.state.set_scale(st);
+                                    // Picking a scale re-enables the scale.
+                                    if !scale_enabled {
+                                        self.state.set_scale_enabled(true);
+                                    }
+                                }
                             }
                         }
                     });
@@ -463,12 +474,30 @@ impl QwerkeysApp {
                             }),
                     )
                     .show_ui(ui, |ui| {
+                        // In chromatic mode the highlight inside the popup is
+                        // muted to match the plain scale buttons.
+                        if !scale_enabled {
+                            let v = ui.visuals_mut();
+                            v.selection.bg_fill = theme.BG_BUTTON;
+                            v.selection.stroke = Stroke::new(1.0, theme.BORDER_GRID);
+                        }
                         for st in ScaleType::ALL {
                             if ui
                                 .selectable_label(st == current_scale, st.name())
                                 .clicked()
                             {
-                                self.state.set_scale(st);
+                                if st == current_scale {
+                                    // Picking the selected scale toggles it off.
+                                    if scale_enabled {
+                                        self.state.set_scale_enabled(false);
+                                    }
+                                } else {
+                                    self.state.set_scale(st);
+                                    // Picking a scale re-enables the scale.
+                                    if !scale_enabled {
+                                        self.state.set_scale_enabled(true);
+                                    }
+                                }
                             }
                         }
                     });
