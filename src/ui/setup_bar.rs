@@ -370,15 +370,12 @@ impl QwerkeysApp {
                                 .min_size(vec2(28.0, 20.0));
 
                             if ui.add(btn).clicked() {
+                                // Clicking the selected root toggles the scale
+                                // on/off; other roots just re-select.
                                 if is_sel {
-                                    // Clicking the selected root toggles the scale on/off.
                                     self.state.set_scale_enabled(!scale_enabled);
                                 } else {
                                     self.state.set_root(root);
-                                    // Picking a root re-enables the scale.
-                                    if !scale_enabled {
-                                        self.state.set_scale_enabled(true);
-                                    }
                                 }
                             }
                         }
@@ -439,15 +436,12 @@ impl QwerkeysApp {
 
                             let resp = ui.add(btn);
                             if resp.clicked() {
+                                // Clicking the selected scale toggles the
+                                // scale on/off; other scales just re-select.
                                 if is_sel {
-                                    // Clicking the selected scale toggles it on/off.
                                     self.state.set_scale_enabled(!scale_enabled);
                                 } else {
                                     self.state.set_scale(st);
-                                    // Picking a scale re-enables the scale.
-                                    if !scale_enabled {
-                                        self.state.set_scale_enabled(true);
-                                    }
                                 }
                             }
                         }
@@ -483,14 +477,10 @@ impl QwerkeysApp {
                                 .clicked()
                             {
                                 if st == current_scale {
-                                    // Picking the selected scale toggles it on/off.
+                                    // Clicking the selected scale toggles on/off.
                                     self.state.set_scale_enabled(!scale_enabled);
                                 } else {
                                     self.state.set_scale(st);
-                                    // Picking a scale re-enables the scale.
-                                    if !scale_enabled {
-                                        self.state.set_scale_enabled(true);
-                                    }
                                 }
                             }
                         }

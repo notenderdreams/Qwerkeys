@@ -21,6 +21,9 @@ pub struct QwerkeysApp {
     pub(super) midi: Arc<MidiEngine>,
     pub(super) clicked_usages: Vec<u32>,
     pub(super) clicked_piano_notes: Vec<u8>,
+    /// Note currently picked in the layout editor (Custom preset), awaiting
+    /// assignment to a keyboard key.
+    pub(super) pending_edit_note: Option<u8>,
     pub(super) current_theme: AppTheme,
     pub(super) theme_colors: ThemeColors,
     pub(super) settings_open: bool,
@@ -91,6 +94,7 @@ impl QwerkeysApp {
             midi,
             clicked_usages: Vec::new(),
             clicked_piano_notes: Vec::new(),
+            pending_edit_note: None,
             current_theme,
             theme_colors,
             settings_open: false,

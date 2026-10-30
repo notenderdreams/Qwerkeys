@@ -8,7 +8,7 @@ use egui::{
     vec2,
 };
 
-use crate::mapping::{KeyMappingDef, find_key_by_label, get_key_display_info};
+use crate::mapping::{KeyMappingDef, MappingConfig, find_key_by_label, get_key_display_info};
 
 use super::QwerkeysApp;
 use crate::utils::mix;
@@ -561,14 +561,8 @@ impl QwerkeysApp {
     ) {
         let theme = self.theme_colors;
         let skin = KeySkin::from_light(self.current_theme.is_light());
-        let root = self.state.get_root();
-        let scale = self.state.get_scale_map();
-        let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
-        let right_oct = self.state.right_base_octave.load(Ordering::SeqCst);
-        let preset = self.state.get_layout_preset();
-        let padding = self.state.mapping_padding.load(Ordering::SeqCst);
-        let (note_str, degree, is_root) =
-            get_key_display_info(key, root, scale, left_oct, right_oct, preset, padding);
+        let cfg = MappingConfig::from_state(&self.state);
+        let (note_str, degree, is_root) = get_key_display_info(key, &cfg);
 
         let is_triggered = self.state.is_key_active(key.usage);
 
@@ -588,8 +582,20 @@ impl QwerkeysApp {
         };
 
         let (rect, response) = ui.allocate_exact_size(vec2(width, height), Sense::click_and_drag());
+        let editing = cfg.preset.is_custom();
 
-        if response.is_pointer_button_down_on() {
+        if editing {
+            // Layout editor: click binds the pending note, right-click unbinds.
+            let response = response.on_hover_cursor(egui::CursorIcon::PointingHand);
+            if response.clicked()
+                && let Some(note) = self.pending_edit_note
+            {
+                self.state.set_custom_note(key.usage, note);
+            }
+            if response.secondary_clicked() {
+                self.state.remove_custom_note(key.usage);
+            }
+        } else if response.is_pointer_button_down_on() {
             if !self.clicked_usages.contains(&key.usage) {
                 self.clicked_usages.push(key.usage);
                 self.midi.handle_key_down(key.usage);

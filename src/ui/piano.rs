@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::sync::atomic::Ordering;
 
 use egui::{
     Align, Align2, Color32, CornerRadius, FontId, Frame, Layout, Margin, Pos2, Rect, RichText,
     Sense, Stroke, Ui, vec2,
 };
 
-use crate::mapping::{KEY_DEFINITIONS, calculate_key_notes};
+use crate::mapping::{KEY_DEFINITIONS, MappingConfig, calculate_key_notes};
 
 use super::QwerkeysApp;
 use super::keyboard::{KeySkin, draw_mac_keycap};
@@ -16,22 +15,18 @@ impl QwerkeysApp {
     pub(super) fn render_piano(&mut self, ui: &mut Ui) {
         let theme = self.theme_colors;
         let skin = KeySkin::from_light(self.current_theme.is_light());
-        let root = self.state.get_root();
-        let scale = self.state.get_scale_map();
-        let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
-        let right_oct = self.state.right_base_octave.load(Ordering::SeqCst);
-        let pad = self.state.mapping_padding.load(Ordering::SeqCst);
-        let preset = self.state.get_layout_preset();
+        let cfg = MappingConfig::from_state(&self.state);
+        let editing = cfg.preset.is_custom();
 
-        let min_oct = left_oct.min(right_oct);
-        let max_oct = left_oct.max(right_oct) + 2;
+        let min_oct = cfg.left_oct.min(cfg.right_oct);
+        let max_oct = cfg.left_oct.max(cfg.right_oct) + 2;
         let num_octaves = (max_oct - min_oct + 1).clamp(1, 7) as usize;
         let total_white_keys = num_octaves * 7 + 1;
 
         // Build reverse lookup: MIDI note -> QWERTY key label(s)
         let mut note_to_key_labels: HashMap<u8, Vec<&'static str>> = HashMap::new();
         for key in KEY_DEFINITIONS {
-            let notes = calculate_key_notes(key, root, scale, left_oct, right_oct, preset, pad);
+            let notes = calculate_key_notes(key, &cfg);
             for n in notes {
                 note_to_key_labels.entry(n).or_default().push(key.label);
             }
@@ -50,6 +45,25 @@ impl QwerkeysApp {
                         .font(FontId::monospace(9.5))
                         .color(theme.TEXT_MUTED),
                 );
+
+                // Layout editor (Custom preset): clear button at far right.
+                if editing {
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if ui
+                            .button(
+                                RichText::new("CLEAR ALL")
+                                    .font(FontId::monospace(9.5))
+                                    .strong()
+                                    .color(theme.TEXT_MUTED),
+                            )
+                            .on_hover_text("Unbind every key in the custom layout")
+                            .clicked()
+                        {
+                            self.state.clear_custom_layout();
+                            self.pending_edit_note = None;
+                        }
+                    });
+                }
             });
 
             ui.add_space(6.0);
@@ -114,7 +128,14 @@ impl QwerkeysApp {
                         }
 
                         let is_active = self.state.is_note_active(note);
-                        let in_scale = scale.contains(root, note);
+                        // While editing the custom layout, highlight only
+                        // notes that have a key bound to them.
+                        let in_scale = if editing {
+                            note_to_key_labels.contains_key(&note)
+                        } else {
+                            cfg.scale.contains(cfg.root, note)
+                        };
+                        let is_pending = editing && self.pending_edit_note == Some(note);
 
                         // Mac-style faces — state is encoded as clear brightness steps:
                         // mapped (lightest) > unmapped/darker > accent only for pressed
@@ -140,6 +161,13 @@ impl QwerkeysApp {
                                 ),
                                 skin.BORDER,
                             )
+                        };
+
+                        // Editor pending note gets an accent outline.
+                        let border = if is_pending {
+                            theme.SAGE_ACCENT
+                        } else {
+                            border
                         };
 
                         // Depressed (playing) keys lose their bevel and sit flush
@@ -231,7 +259,12 @@ impl QwerkeysApp {
                             }
 
                             let is_active = self.state.is_note_active(note);
-                            let in_scale = scale.contains(root, note);
+                            let in_scale = if editing {
+                                note_to_key_labels.contains_key(&note)
+                            } else {
+                                cfg.scale.contains(cfg.root, note)
+                            };
+                            let is_pending = editing && self.pending_edit_note == Some(note);
 
                             // Glossy dark mac keys — root plays no special role
                             let fill = if is_active {
@@ -243,10 +276,9 @@ impl QwerkeysApp {
                                 skin.FACE_DARK
                             };
 
-                            painter.rect(
-                                bk_rect,
-                                piano_corner,
-                                fill,
+                            let bk_stroke = if is_pending {
+                                Stroke::new(2.0, theme.SAGE_ACCENT)
+                            } else {
                                 Stroke::new(
                                     0.75,
                                     if skin.LIGHT {
@@ -254,7 +286,13 @@ impl QwerkeysApp {
                                     } else {
                                         Color32::from_rgb(0x0E, 0x0F, 0x11)
                                     },
-                                ),
+                                )
+                            };
+                            painter.rect(
+                                bk_rect,
+                                piano_corner,
+                                fill,
+                                bk_stroke,
                                 egui::StrokeKind::Inside,
                             );
 
@@ -323,6 +361,10 @@ impl QwerkeysApp {
                     // Handle direct piano mouse clicking
                     if response.hovered() && is_mouse_down {
                         let clicked = hit_black_note.or(hit_white_note);
+                        if editing && let Some(note) = clicked {
+                            // Layout editor: mouse-down picks the pending note.
+                            self.pending_edit_note = Some(note);
+                        }
                         if let Some(note) = clicked
                             && !self.clicked_piano_notes.contains(&note)
                         {

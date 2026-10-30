@@ -8,6 +8,8 @@ pub use keys::{
     hid_usage_to_mac_keycode,
 };
 
+use std::collections::HashMap;
+
 use crate::scale::{RootNote, ScaleMap, format_midi_note};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -16,13 +18,15 @@ pub enum LayoutPreset {
     LinearSplit,
     OctaveStacked,
     LinearContinuous,
+    Custom,
 }
 
 impl LayoutPreset {
-    pub const ALL: [LayoutPreset; 3] = [
+    pub const ALL: [LayoutPreset; 4] = [
         LayoutPreset::LinearSplit,
         LayoutPreset::OctaveStacked,
         LayoutPreset::LinearContinuous,
+        LayoutPreset::Custom,
     ];
 
     pub fn name(&self) -> &'static str {
@@ -30,88 +34,123 @@ impl LayoutPreset {
             LayoutPreset::LinearSplit => "Linear Split",
             LayoutPreset::OctaveStacked => "Octave Stacked",
             LayoutPreset::LinearContinuous => "Linear Continuous",
+            LayoutPreset::Custom => "Custom",
+        }
+    }
+
+    pub fn is_custom(&self) -> bool {
+        *self == LayoutPreset::Custom
+    }
+}
+
+/// Usage-code → MIDI-note table for [`LayoutPreset::Custom`].
+pub type CustomLayoutMap = HashMap<u32, u8>;
+
+/// A snapshot of everything needed to turn a keypress into a note.
+#[derive(Clone)]
+pub struct MappingConfig {
+    pub root: RootNote,
+    pub scale: ScaleMap,
+    pub left_oct: i8,
+    pub right_oct: i8,
+    pub preset: LayoutPreset,
+    pub padding: i8,
+    pub custom: CustomLayoutMap,
+}
+
+impl MappingConfig {
+    pub fn from_state(state: &crate::state::AppState) -> Self {
+        use std::sync::atomic::Ordering;
+        Self {
+            root: state.get_root(),
+            scale: state.get_scale_map(),
+            left_oct: state.left_base_octave.load(Ordering::SeqCst),
+            right_oct: state.right_base_octave.load(Ordering::SeqCst),
+            preset: state.get_layout_preset(),
+            padding: state.mapping_padding.load(Ordering::SeqCst),
+            custom: state.get_custom_layout(),
         }
     }
 }
 
-pub fn calculate_key_notes(
-    key: &KeyMappingDef,
-    root: RootNote,
-    scale: ScaleMap,
-    left_base_octave: i8,
-    right_base_octave: i8,
-    preset: LayoutPreset,
-    padding: i8,
-) -> Vec<u8> {
-    match preset {
-        LayoutPreset::LinearSplit => {
-            let base_octave = match key.hand {
-                HandSide::Left => left_base_octave,
-                HandSide::Right => right_base_octave,
-            };
-            let deg = key.degree_index as i32 - padding as i32;
-            vec![scale.midi_note(root, base_octave, deg)]
-        }
-        LayoutPreset::OctaveStacked => {
-            let global_col = match key.hand {
-                HandSide::Left => key.col,
-                HandSide::Right => match key.row {
-                    3 => key.col + 5,
-                    _ => key.col + 6,
-                },
-            };
-            let deg = global_col as i32 - padding as i32;
-            let row_oct_offset = (3 - key.row as i8).max(0);
-            let oct = left_base_octave + row_oct_offset;
-            vec![scale.midi_note(root, oct, deg)]
-        }
-        LayoutPreset::LinearContinuous => {
-            let row_base = match key.row {
-                3 => 0,
-                2 => 9,
-                1 => 19,
-                _ => 30,
-            };
-            let global_col = match key.hand {
-                HandSide::Left => key.col,
-                HandSide::Right => match key.row {
-                    3 => key.col + 5,
-                    _ => key.col + 6,
-                },
-            };
-            let deg = row_base + global_col as i32 - padding as i32;
-            vec![scale.midi_note(root, left_base_octave, deg)]
-        }
-    }
-}
-
-pub fn get_key_display_info(
-    key: &KeyMappingDef,
-    root: RootNote,
-    scale: ScaleMap,
-    left_base_octave: i8,
-    right_base_octave: i8,
-    preset: LayoutPreset,
-    padding: i8,
-) -> (String, String, bool) {
-    let notes = calculate_key_notes(
-        key,
+/// Map a keypress to its MIDI note(s) under the given config. For the
+/// Custom layout an unassigned key maps to nothing (silent).
+pub fn calculate_key_notes(key: &KeyMappingDef, cfg: &MappingConfig) -> Vec<u8> {
+    let MappingConfig {
         root,
         scale,
-        left_base_octave,
-        right_base_octave,
+        left_oct: left_base_octave,
+        right_oct: right_base_octave,
         preset,
         padding,
-    );
-    let primary_note = notes.first().copied().unwrap_or(60);
-    // In chromatic mode (scale off) root keys look like every other key.
-    let is_root = !scale.chromatic && scale.is_root(root, primary_note);
-
+        custom,
+    } = cfg;
     match preset {
+        LayoutPreset::Custom => custom.get(&key.usage).copied().into_iter().collect(),
+        LayoutPreset::LinearSplit => {
+            let base_octave = match key.hand {
+                HandSide::Left => *left_base_octave,
+                HandSide::Right => *right_base_octave,
+            };
+            let deg = key.degree_index as i32 - *padding as i32;
+            vec![scale.midi_note(*root, base_octave, deg)]
+        }
+        LayoutPreset::OctaveStacked => {
+            let global_col = match key.hand {
+                HandSide::Left => key.col,
+                HandSide::Right => match key.row {
+                    3 => key.col + 5,
+                    _ => key.col + 6,
+                },
+            };
+            let deg = global_col as i32 - *padding as i32;
+            let row_oct_offset = (3 - key.row as i8).max(0);
+            let oct = left_base_octave + row_oct_offset;
+            vec![scale.midi_note(*root, oct, deg)]
+        }
+        LayoutPreset::LinearContinuous => {
+            let row_base = match key.row {
+                3 => 0,
+                2 => 9,
+                1 => 19,
+                _ => 30,
+            };
+            let global_col = match key.hand {
+                HandSide::Left => key.col,
+                HandSide::Right => match key.row {
+                    3 => key.col + 5,
+                    _ => key.col + 6,
+                },
+            };
+            let deg = row_base + global_col as i32 - *padding as i32;
+            vec![scale.midi_note(*root, *left_base_octave, deg)]
+        }
+    }
+}
+
+pub fn get_key_display_info(key: &KeyMappingDef, cfg: &MappingConfig) -> (String, String, bool) {
+    let notes = calculate_key_notes(key, cfg);
+    let primary_note = notes.first().copied().unwrap_or(60);
+    // In the custom layout there is no scale, so no root highlighting.
+    let is_root = !cfg.preset.is_custom()
+        && !cfg.scale.chromatic
+        && cfg.scale.is_root(cfg.root, primary_note);
+
+    if cfg.preset.is_custom() {
+        let note_str = cfg
+            .custom
+            .get(&key.usage)
+            .map(|&n| format_midi_note(n))
+            .unwrap_or_default();
+        // Unassigned keys show nothing on the cap.
+        return (note_str, String::new(), is_root);
+    }
+
+    match cfg.preset {
         LayoutPreset::LinearSplit => {
             let note_str = format_midi_note(primary_note);
-            let deg = key.degree_index as i32 - padding as i32;
-            let degree = scale.degree_label(deg).to_string();
+            let deg = key.degree_index as i32 - cfg.padding as i32;
+            let degree = cfg.scale.degree_label(deg).to_string();
             (note_str, degree, is_root)
         }
         LayoutPreset::OctaveStacked => {
@@ -123,8 +162,8 @@ pub fn get_key_display_info(
                     _ => key.col + 6,
                 },
             };
-            let deg = global_col as i32 - padding as i32;
-            let degree = scale.degree_label(deg).to_string();
+            let deg = global_col as i32 - cfg.padding as i32;
+            let degree = cfg.scale.degree_label(deg).to_string();
             (note_str, degree, is_root)
         }
         LayoutPreset::LinearContinuous => {
@@ -142,9 +181,13 @@ pub fn get_key_display_info(
                     _ => key.col + 6,
                 },
             };
-            let deg = row_base + global_col as i32 - padding as i32;
-            let degree = scale.degree_label(deg).to_string();
+            let deg = row_base + global_col as i32 - cfg.padding as i32;
+            let degree = cfg.scale.degree_label(deg).to_string();
             (note_str, degree, is_root)
+        }
+        LayoutPreset::Custom => {
+            // Handled by the early return above.
+            unreachable!("custom layout display is handled before this match")
         }
     }
 }
@@ -221,12 +264,6 @@ mod tests {
 
     #[test]
     fn test_preset_linear_continuous_strictly_ascending() {
-        let root = RootNote::C;
-        let scale = ScaleMap::from(ScaleType::Major);
-        let left_oct = 2;
-        let right_oct = 4;
-        let preset = LayoutPreset::LinearContinuous;
-
         // Verify across rows that each subsequent key is higher pitch
         let z = find_key_by_label("Z").unwrap();
         let dot = find_key_by_label(".").unwrap();
@@ -237,15 +274,22 @@ mod tests {
         let key_1 = find_key_by_label("1").unwrap();
         let equals = find_key_by_label("=").unwrap();
 
-        let n_z = calculate_key_notes(z, root, scale, left_oct, right_oct, preset, 0)[0];
-        let n_dot = calculate_key_notes(dot, root, scale, left_oct, right_oct, preset, 0)[0];
-        let n_a = calculate_key_notes(a, root, scale, left_oct, right_oct, preset, 0)[0];
-        let n_semi = calculate_key_notes(semi, root, scale, left_oct, right_oct, preset, 0)[0];
-        let n_q = calculate_key_notes(q, root, scale, left_oct, right_oct, preset, 0)[0];
-        let n_open_b =
-            calculate_key_notes(open_bracket, root, scale, left_oct, right_oct, preset, 0)[0];
-        let n_1 = calculate_key_notes(key_1, root, scale, left_oct, right_oct, preset, 0)[0];
-        let n_equals = calculate_key_notes(equals, root, scale, left_oct, right_oct, preset, 0)[0];
+        let cfg = map_cfg(
+            RootNote::C,
+            ScaleType::Major,
+            2,
+            4,
+            LayoutPreset::LinearContinuous,
+            0,
+        );
+        let n_z = calculate_key_notes(z, &cfg)[0];
+        let n_dot = calculate_key_notes(dot, &cfg)[0];
+        let n_a = calculate_key_notes(a, &cfg)[0];
+        let n_semi = calculate_key_notes(semi, &cfg)[0];
+        let n_q = calculate_key_notes(q, &cfg)[0];
+        let n_open_b = calculate_key_notes(open_bracket, &cfg)[0];
+        let n_1 = calculate_key_notes(key_1, &cfg)[0];
+        let n_equals = calculate_key_notes(equals, &cfg)[0];
 
         assert!(n_z < n_dot);
         assert!(n_dot < n_a);
@@ -263,16 +307,18 @@ mod tests {
         let q = find_key_by_label("Q").unwrap(); // row 1, col 0
         let key_1 = find_key_by_label("1").unwrap(); // row 0, col 0
 
-        let root = RootNote::C;
-        let scale = ScaleMap::from(ScaleType::Major);
-        let left_oct = 2;
-        let right_oct = 4;
-        let preset = LayoutPreset::OctaveStacked;
-
-        let note_z = calculate_key_notes(z, root, scale, left_oct, right_oct, preset, 0)[0];
-        let note_a = calculate_key_notes(a, root, scale, left_oct, right_oct, preset, 0)[0];
-        let note_q = calculate_key_notes(q, root, scale, left_oct, right_oct, preset, 0)[0];
-        let note_1 = calculate_key_notes(key_1, root, scale, left_oct, right_oct, preset, 0)[0];
+        let cfg = map_cfg(
+            RootNote::C,
+            ScaleType::Major,
+            2,
+            4,
+            LayoutPreset::OctaveStacked,
+            0,
+        );
+        let note_z = calculate_key_notes(z, &cfg)[0];
+        let note_a = calculate_key_notes(a, &cfg)[0];
+        let note_q = calculate_key_notes(q, &cfg)[0];
+        let note_1 = calculate_key_notes(key_1, &cfg)[0];
 
         // Each row should be exactly 12 semitones (1 octave) higher
         assert_eq!(note_a, note_z + 12);
@@ -282,23 +328,88 @@ mod tests {
 
     #[test]
     fn test_mapping_padding_shifts_degrees() {
-        let root = RootNote::C;
-        let scale = ScaleMap::from(ScaleType::Major);
-        let left_oct = 3;
-        let right_oct = 4;
-        let preset = LayoutPreset::LinearSplit;
-
         let z = find_key_by_label("Z").unwrap();
         // With padding 0, Z (degree 0) is C3 (MIDI 48)
-        let note_pad_0 = calculate_key_notes(z, root, scale, left_oct, right_oct, preset, 0)[0];
+        let note_pad_0 = calculate_key_notes(
+            z,
+            &map_cfg(
+                RootNote::C,
+                ScaleType::Major,
+                3,
+                4,
+                LayoutPreset::LinearSplit,
+                0,
+            ),
+        )[0];
         assert_eq!(note_pad_0, 48);
 
         // With padding 1, Z plays degree -1 -> B2 (MIDI 47)
-        let note_pad_1 = calculate_key_notes(z, root, scale, left_oct, right_oct, preset, 1)[0];
+        let note_pad_1 = calculate_key_notes(
+            z,
+            &map_cfg(
+                RootNote::C,
+                ScaleType::Major,
+                3,
+                4,
+                LayoutPreset::LinearSplit,
+                1,
+            ),
+        )[0];
         assert_eq!(note_pad_1, 47);
 
         // With padding -1, Z plays degree 1 -> D3 (MIDI 50)
-        let note_pad_neg1 = calculate_key_notes(z, root, scale, left_oct, right_oct, preset, -1)[0];
+        let note_pad_neg1 = calculate_key_notes(
+            z,
+            &map_cfg(
+                RootNote::C,
+                ScaleType::Major,
+                3,
+                4,
+                LayoutPreset::LinearSplit,
+                -1,
+            ),
+        )[0];
         assert_eq!(note_pad_neg1, 50);
+    }
+
+    #[test]
+    fn test_custom_layout_direct_assignment() {
+        let cfg = MappingConfig {
+            root: RootNote::C,
+            scale: ScaleMap::from(ScaleType::Major),
+            left_oct: 4,
+            right_oct: 4,
+            preset: LayoutPreset::Custom,
+            padding: 0,
+            custom: CustomLayoutMap::from([(0x04, 60), (0x05, 61)]),
+        };
+
+        // Assigned keys map straight to their note.
+        let a_key = find_key_by_usage(0x04).unwrap();
+        assert_eq!(calculate_key_notes(a_key, &cfg), vec![60]);
+
+        // Unassigned keys are silent.
+        let other = find_key_by_usage(0x09).unwrap();
+        assert!(calculate_key_notes(other, &cfg).is_empty());
+    }
+
+    /// Test helper: build a `MappingConfig` with no custom bindings.
+    fn map_cfg(
+        root: RootNote,
+        scale: ScaleType,
+        left_oct: i8,
+        right_oct: i8,
+        preset: LayoutPreset,
+        padding: i8,
+    ) -> MappingConfig {
+        MappingConfig {
+            root,
+            scale: ScaleMap::from(scale),
+            left_oct,
+            right_oct,
+            preset,
+            padding,
+            custom: CustomLayoutMap::new(),
+        }
     }
 }

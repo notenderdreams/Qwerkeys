@@ -4,6 +4,7 @@
 //! and re-applied on startup. There is no autosave/debounce — each setter
 //! simply writes the file synchronously.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -11,13 +12,15 @@ use crate::mapping::LayoutPreset;
 use crate::scale::{RootNote, ScaleType};
 use crate::ui::AppTheme;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
     pub theme: AppTheme,
     pub root: RootNote,
     pub scale: ScaleType,
     pub scale_enabled: bool,
     pub layout_preset: LayoutPreset,
+    /// Direct usage→note table for the Custom layout.
+    pub custom_layout: HashMap<u32, u8>,
     pub base_octave: i8,
     pub mapping_padding: i8,
     pub velocity: u8,
@@ -34,6 +37,7 @@ impl Default for Settings {
             scale: ScaleType::NaturalMinor,
             scale_enabled: true,
             layout_preset: LayoutPreset::LinearSplit,
+            custom_layout: HashMap::new(),
             base_octave: 4,
             mapping_padding: 0,
             velocity: 100,
@@ -109,6 +113,18 @@ fn parse(text: &str) -> Settings {
                     s.layout_preset = preset;
                 }
             }
+            "custom_layout" => {
+                // Format: comma-separated "usage:note" pairs (decimal).
+                for pair in value.split(',') {
+                    if let Some((usage, note)) = pair.split_once(':')
+                        && let Ok(usage) = usage.trim().parse::<u32>()
+                        && let Ok(note) = note.trim().parse::<u8>()
+                        && note < 128
+                    {
+                        s.custom_layout.insert(usage, note);
+                    }
+                }
+            }
             "base_octave" => {
                 if let Ok(v) = value.parse::<i8>() {
                     s.base_octave = v.clamp(0, 7);
@@ -142,8 +158,15 @@ pub fn save(s: &Settings) {
         return;
     };
 
+    let custom_layout_pairs = s
+        .custom_layout
+        .iter()
+        .map(|(usage, note)| format!("{usage}:{note}"))
+        .collect::<Vec<_>>()
+        .join(",");
+
     let body = format!(
-        "theme={}\nroot={}\nscale={}\nscale_enabled={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\nauto_check_updates={}\n",
+        "theme={}\nroot={}\nscale={}\nscale_enabled={}\nlayout={}\ncustom_layout={custom_layout_pairs}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\nauto_check_updates={}\n",
         s.theme as usize,
         s.root as usize,
         s.scale as usize,
@@ -183,6 +206,7 @@ mod tests {
             scale: ScaleType::Blues,
             scale_enabled: false,
             layout_preset: LayoutPreset::LinearContinuous,
+            custom_layout: HashMap::from([(0x04, 60), (0x05, 61)]),
             base_octave: 2,
             mapping_padding: -3,
             velocity: 64,
@@ -191,8 +215,15 @@ mod tests {
             auto_check_updates: true,
         };
 
+        let custom_layout_pairs = s
+            .custom_layout
+            .iter()
+            .map(|(usage, note)| format!("{usage}:{note}"))
+            .collect::<Vec<_>>()
+            .join(",");
+
         let body = format!(
-            "theme={}\nroot={}\nscale={}\nscale_enabled={}\nlayout={}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\nauto_check_updates={}\n",
+            "theme={}\nroot={}\nscale={}\nscale_enabled={}\nlayout={}\ncustom_layout={custom_layout_pairs}\nbase_octave={}\nmapping_padding={}\nvelocity={}\nshow_unmapped={}\nonboarding_completed={}\nauto_check_updates={}\n",
             s.theme as usize,
             s.root as usize,
             s.scale as usize,
@@ -212,6 +243,7 @@ mod tests {
         assert_eq!(parsed.scale, s.scale);
         assert_eq!(parsed.scale_enabled, s.scale_enabled);
         assert_eq!(parsed.layout_preset, s.layout_preset);
+        assert_eq!(parsed.custom_layout, s.custom_layout);
         assert_eq!(parsed.base_octave, s.base_octave);
         assert_eq!(parsed.mapping_padding, s.mapping_padding);
         assert_eq!(parsed.velocity, s.velocity);

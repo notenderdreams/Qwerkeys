@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use midir::{MidiOutput, MidiOutputConnection, os::unix::VirtualOutput};
 
-use crate::mapping::{calculate_key_notes, find_key_by_usage};
+use crate::mapping::{MappingConfig, calculate_key_notes, find_key_by_usage};
 use crate::scale::format_midi_note;
 use crate::state::AppState;
 
@@ -55,14 +55,12 @@ impl MidiEngine {
                 return;
             }
 
-            let root = self.state.get_root();
-            let scale = self.state.get_scale_map();
-            let left_oct = self.state.left_base_octave.load(Ordering::SeqCst);
-            let right_oct = self.state.right_base_octave.load(Ordering::SeqCst);
-            let preset = self.state.get_layout_preset();
-            let pad = self.state.mapping_padding.load(Ordering::SeqCst);
-
-            let notes = calculate_key_notes(key, root, scale, left_oct, right_oct, preset, pad);
+            let cfg = MappingConfig::from_state(&self.state);
+            let notes = calculate_key_notes(key, &cfg);
+            // In the custom layout, unmapped keys stay silent.
+            if notes.is_empty() {
+                return;
+            }
             let vel = self.state.velocity.load(Ordering::SeqCst);
 
             // Record active state

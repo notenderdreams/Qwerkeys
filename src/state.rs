@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI8, AtomicU8, AtomicUsize, Ordering};
 
 use crate::iokit::KeyboardDevice;
-use crate::mapping::LayoutPreset;
+use crate::mapping::{CustomLayoutMap, LayoutPreset};
 use crate::scale::{RootNote, ScaleMap, ScaleType};
 use crate::settings;
 use crate::ui::AppTheme;
@@ -13,6 +13,8 @@ pub struct AppState {
     pub scale: Mutex<ScaleType>,
     pub scale_enabled: AtomicBool,
     pub layout_preset: Mutex<LayoutPreset>,
+    /// Direct usage→note table for [`LayoutPreset::Custom`].
+    pub custom_layout: Mutex<CustomLayoutMap>,
     pub base_octave: AtomicI8,
     pub mapping_padding: AtomicI8,
     pub left_base_octave: AtomicI8,
@@ -46,6 +48,7 @@ impl AppState {
             scale: Mutex::new(s.scale),
             scale_enabled: AtomicBool::new(s.scale_enabled),
             layout_preset: Mutex::new(s.layout_preset),
+            custom_layout: Mutex::new(s.custom_layout),
             base_octave: AtomicI8::new(s.base_octave),
             mapping_padding: AtomicI8::new(s.mapping_padding),
             left_base_octave: AtomicI8::new(s.base_octave - 1),
@@ -98,6 +101,7 @@ impl AppState {
             scale: self.get_scale(),
             scale_enabled: self.get_scale_enabled(),
             layout_preset: self.get_layout_preset(),
+            custom_layout: self.get_custom_layout(),
             base_octave: self.base_octave.load(Ordering::SeqCst),
             mapping_padding: self.mapping_padding.load(Ordering::SeqCst),
             velocity: self.velocity.load(Ordering::SeqCst),
@@ -149,6 +153,28 @@ impl AppState {
 
     pub fn set_layout_preset(&self, preset: LayoutPreset) {
         *self.layout_preset.lock().unwrap() = preset;
+        self.request_repaint();
+        self.persist();
+    }
+
+    pub fn get_custom_layout(&self) -> CustomLayoutMap {
+        self.custom_layout.lock().unwrap().clone()
+    }
+
+    pub fn set_custom_note(&self, usage: u32, note: u8) {
+        self.custom_layout.lock().unwrap().insert(usage, note);
+        self.request_repaint();
+        self.persist();
+    }
+
+    pub fn remove_custom_note(&self, usage: u32) {
+        self.custom_layout.lock().unwrap().remove(&usage);
+        self.request_repaint();
+        self.persist();
+    }
+
+    pub fn clear_custom_layout(&self) {
+        self.custom_layout.lock().unwrap().clear();
         self.request_repaint();
         self.persist();
     }
