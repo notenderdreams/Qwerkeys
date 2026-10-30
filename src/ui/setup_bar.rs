@@ -644,7 +644,7 @@ impl QwerkeysApp {
     }
 
     /// Renders an aligned stepper widget: label on left, framed counter box with minus/value/plus on right.
-    fn render_stepper(
+    pub(super) fn render_stepper(
         &self,
         ui: &mut Ui,
         id_salt: &str,

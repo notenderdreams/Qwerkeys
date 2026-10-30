@@ -14,6 +14,8 @@ use egui::{Align, Frame, Layout, Margin, Stroke, vec2};
 use crate::midi::MidiEngine;
 use crate::state::AppState;
 
+use settings::SettingsSection;
+
 pub use theme::{AppTheme, ThemeColors};
 
 pub struct QwerkeysApp {
@@ -28,6 +30,8 @@ pub struct QwerkeysApp {
     pub(super) theme_colors: ThemeColors,
     pub(super) settings_open: bool,
     pub(super) settings_icon_rot: f32,
+    /// Section currently selected in the settings sidebar.
+    pub(super) settings_section: SettingsSection,
 
     /// Whether the onboarding/permissions page is dismissed.
     pub(super) onboarding_done: bool,
@@ -99,6 +103,7 @@ impl QwerkeysApp {
             theme_colors,
             settings_open: false,
             settings_icon_rot: 0.0,
+            settings_section: SettingsSection::default(),
             onboarding_done,
             onboarding_requested: [false; 2],
             input_monitoring_needs_restart: Arc::new(std::sync::atomic::AtomicBool::new(false)),

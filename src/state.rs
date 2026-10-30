@@ -212,6 +212,12 @@ impl AppState {
         self.persist();
     }
 
+    pub fn set_auto_check_updates(&self, check: bool) {
+        self.auto_check_updates.store(check, Ordering::SeqCst);
+        self.request_repaint();
+        self.persist();
+    }
+
     pub fn set_selected_device(&self, device_ptr: usize) {
         self.selected_device_ptr.store(device_ptr, Ordering::SeqCst);
         self.request_repaint();
