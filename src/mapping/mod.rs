@@ -1,5 +1,6 @@
 //! Keyboard-to-MIDI mapping: the physical key table (see [`keys`]) plus the
-//! three layout presets that turn keys into MIDI notes.
+//! layout presets that turn keys into MIDI notes (including the Ableton
+//! piano-style preset).
 
 mod keys;
 
@@ -10,7 +11,7 @@ pub use keys::{
 
 use std::collections::HashMap;
 
-use crate::scale::{RootNote, ScaleMap, format_midi_note};
+use crate::scale::{RootNote, ScaleMap, chromatic_degree_label, format_midi_note};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LayoutPreset {
@@ -19,14 +20,18 @@ pub enum LayoutPreset {
     OctaveStacked,
     LinearContinuous,
     Custom,
+    /// Keep `Ableton` last in the declaration order: presets are persisted by
+    /// their index, so appending preserves saved settings files.
+    Ableton,
 }
 
 impl LayoutPreset {
-    pub const ALL: [LayoutPreset; 4] = [
+    pub const ALL: [LayoutPreset; 5] = [
         LayoutPreset::LinearSplit,
         LayoutPreset::OctaveStacked,
         LayoutPreset::LinearContinuous,
         LayoutPreset::Custom,
+        LayoutPreset::Ableton,
     ];
 
     pub fn name(&self) -> &'static str {
@@ -35,6 +40,7 @@ impl LayoutPreset {
             LayoutPreset::OctaveStacked => "Octave Stacked",
             LayoutPreset::LinearContinuous => "Linear Continuous",
             LayoutPreset::Custom => "Custom",
+            LayoutPreset::Ableton => "Ableton",
         }
     }
 
@@ -45,6 +51,45 @@ impl LayoutPreset {
 
 /// Usage-code → MIDI-note table for [`LayoutPreset::Custom`].
 pub type CustomLayoutMap = HashMap<u32, u8>;
+
+/// The Ableton Live "Computer MIDI Keyboard" piano layout.
+///
+/// Home row plays the white keys, the row above plays the black keys, and the
+/// piano continues into the next octave from `K` onward. Offsets are chromatic
+/// semitones relative to the selected root (so `A` is always the root), and
+/// keys Live doesn't map are silent.
+///
+/// A=C · W=C# · S=D · E=D# · D=E · F=F · T=F# · G=G · Y=G# · H=A · U=A# ·
+/// J=B · K=C(+1 oct) · O=C#(+1 oct) · L=D(+1 oct) · P=D#(+1 oct) · ;=E(+1 oct)
+pub static ABLETON_OFFSETS: &[(&str, i32)] = &[
+    // Center row: the white keys of the base octave
+    ("A", 0),
+    ("S", 2),
+    ("D", 4),
+    ("F", 5),
+    ("G", 7),
+    ("H", 9),
+    ("J", 11),
+    // Upper row: the black keys of the base octave
+    ("W", 1),
+    ("E", 3),
+    ("T", 6),
+    ("Y", 8),
+    ("U", 10),
+    // From K the piano continues one octave up
+    ("K", 12),
+    ("O", 13),
+    ("L", 14),
+    ("P", 15),
+    (";", 16),
+];
+
+pub fn ableton_offset(label: &str) -> Option<i32> {
+    ABLETON_OFFSETS
+        .iter()
+        .find(|(l, _)| *l == label)
+        .map(|&(_, offset)| offset)
+}
 
 /// A snapshot of everything needed to turn a keypress into a note.
 #[derive(Clone)]
@@ -107,6 +152,17 @@ pub fn calculate_key_notes(key: &KeyMappingDef, cfg: &MappingConfig) -> Vec<u8> 
             let row_oct_offset = (3 - key.row as i8).max(0);
             let oct = left_base_octave + row_oct_offset;
             vec![scale.midi_note(*root, oct, deg)]
+        }
+        LayoutPreset::Ableton => {
+            // The Ableton layout is a fixed piano: chromatic semitone steps
+            // from the selected root, one octave per 12, on the left octave.
+            let Some(offset) = ableton_offset(key.label) else {
+                return vec![]; // Keys Live doesn't map stay silent.
+            };
+            let oct = *left_base_octave + (offset / 12) as i8;
+            let note =
+                (oct as i16 + 1) * 12 + root.semitone() as i16 + (offset.rem_euclid(12)) as i16;
+            vec![note.clamp(0, 127) as u8]
         }
         LayoutPreset::LinearContinuous => {
             let row_base = match key.row {
@@ -183,6 +239,15 @@ pub fn get_key_display_info(key: &KeyMappingDef, cfg: &MappingConfig) -> (String
             };
             let deg = row_base + global_col as i32 - cfg.padding as i32;
             let degree = cfg.scale.degree_label(deg).to_string();
+            (note_str, degree, is_root)
+        }
+        LayoutPreset::Ableton => {
+            let Some(offset) = ableton_offset(key.label) else {
+                // Unmapped keys are silent — show nothing on the cap.
+                return (String::new(), String::new(), false);
+            };
+            let note_str = format_midi_note(primary_note);
+            let degree = chromatic_degree_label(offset).to_string();
             (note_str, degree, is_root)
         }
         LayoutPreset::Custom => {
@@ -391,6 +456,77 @@ mod tests {
         // Unassigned keys are silent.
         let other = find_key_by_usage(0x09).unwrap();
         assert!(calculate_key_notes(other, &cfg).is_empty());
+    }
+
+    #[test]
+    fn test_ableton_layout_piano_mapping() {
+        let cfg = map_cfg(
+            RootNote::C,
+            ScaleType::Major,
+            2,
+            4,
+            LayoutPreset::Ableton,
+            0,
+        );
+
+        // Home row = white keys: A plays the root, S D F G H J continue up.
+        let a = find_key_by_label("A").unwrap();
+        let s = find_key_by_label("S").unwrap();
+        let d = find_key_by_label("D").unwrap();
+        let j = find_key_by_label("J").unwrap();
+        assert_eq!(calculate_key_notes(a, &cfg), vec![36]); // C2 (Root)
+        assert_eq!(calculate_key_notes(s, &cfg), vec![38]); // D2
+        assert_eq!(calculate_key_notes(d, &cfg), vec![40]); // E2
+        assert_eq!(calculate_key_notes(j, &cfg), vec![47]); // B2
+
+        // Top row = black keys: W is one semitone above A.
+        let w = find_key_by_label("W").unwrap();
+        let e = find_key_by_label("E").unwrap();
+        assert_eq!(calculate_key_notes(w, &cfg), vec![37]); // C#2
+        assert_eq!(calculate_key_notes(e, &cfg), vec![39]); // D#2
+
+        // From K the piano continues one octave up; ; reaches E3.
+        let k = find_key_by_label("K").unwrap();
+        let semi = find_key_by_label(";").unwrap();
+        assert_eq!(calculate_key_notes(k, &cfg), vec![48]); // C3
+        assert_eq!(calculate_key_notes(semi, &cfg), vec![52]); // E3
+    }
+
+    #[test]
+    fn test_ableton_layout_unmapped_keys_silent() {
+        let cfg = map_cfg(
+            RootNote::C,
+            ScaleType::Major,
+            2,
+            4,
+            LayoutPreset::Ableton,
+            0,
+        );
+        // Keys Live doesn't use stay silent, like the custom layout.
+        for label in ["Z", "1", ",", "."] {
+            let key = find_key_by_label(label).unwrap();
+            assert!(
+                calculate_key_notes(key, &cfg).is_empty(),
+                "{label} should be silent"
+            );
+        }
+    }
+
+    #[test]
+    fn test_ableton_layout_transposes_with_root_and_octave() {
+        // Root D on octave 4: A plays D4, W plays D#4.
+        let cfg = map_cfg(
+            RootNote::D,
+            ScaleType::Major,
+            4,
+            4,
+            LayoutPreset::Ableton,
+            0,
+        );
+        let a = find_key_by_label("A").unwrap();
+        let w = find_key_by_label("W").unwrap();
+        assert_eq!(calculate_key_notes(a, &cfg), vec![62]); // D4
+        assert_eq!(calculate_key_notes(w, &cfg), vec![63]); // D#4
     }
 
     /// Test helper: build a `MappingConfig` with no custom bindings.

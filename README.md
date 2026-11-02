@@ -28,7 +28,7 @@
 - **Virtual MIDI port**: `qwerkeys-input` works in any DAW
 - **Built-in scales**: pick a root and scale; every key you press is in tune
 - **Left/right split**: map one keyboard to two hands with independent octaves per side
-- **Layout presets**: Linear Split, Octave Stacked, or Linear Continuous
+- **Layout presets**: Linear Split, Octave Stacked, Linear Continuous, Ableton, or Custom
 - **Dedicated keyboard mode**: target an external keyboard and its typing is suppressed, so it becomes purely a musical instrument
 
 ## Preview
