@@ -1,4 +1,4 @@
-use egui::{Color32, Stroke, Visuals};
+use egui::{Color32, Stroke, Theme, Visuals};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AppTheme {
@@ -55,6 +55,30 @@ impl AppTheme {
         visuals.selection.bg_fill = colors.HIGHLIGHT_BG;
         visuals.selection.stroke = Stroke::new(1.0, colors.TEXT_PRIMARY);
         visuals
+    }
+
+    /// The egui style slot this theme occupies.
+    ///
+    /// egui keeps separate dark/light styles and, with the default
+    /// `ThemePreference::System`, swaps between them whenever the OS
+    /// appearance changes. `set_visuals` only writes the *active* slot, so a
+    /// system theme switch would drop our customized visuals and fall back to
+    /// egui's stock light look. Pinning the preference to our slot prevents
+    /// the OS from switching slots underneath us.
+    pub fn egui_slot(&self) -> Theme {
+        if self.is_light() {
+            Theme::Light
+        } else {
+            Theme::Dark
+        }
+    }
+
+    /// Apply this theme's visuals to the context, pinned to our own style
+    /// slot so the macOS light/dark mode switch cannot override them.
+    pub fn apply_to(&self, ctx: &egui::Context) {
+        let slot = self.egui_slot();
+        ctx.set_theme(slot);
+        ctx.set_visuals_of(slot, self.egui_visuals());
     }
 }
 
@@ -346,6 +370,20 @@ mod tests {
             let visuals = theme.egui_visuals();
             assert_eq!(visuals.selection.bg_fill, colors.HIGHLIGHT_BG);
             assert_eq!(visuals.selection.stroke.color, colors.TEXT_PRIMARY);
+        }
+    }
+
+    /// The OS light/dark switch must not swap egui into its default light
+    /// style slot: applying a theme pins the preference and the visuals to
+    /// that theme's own slot.
+    #[test]
+    fn test_theme_pins_its_egui_slot() {
+        for theme in AppTheme::ALL {
+            let ctx = egui::Context::default();
+            theme.apply_to(&ctx);
+            assert_eq!(ctx.theme(), theme.egui_slot());
+            let style = ctx.style_of(theme.egui_slot());
+            assert_eq!(style.visuals.panel_fill, theme.colors().BG_APP);
         }
     }
 }

@@ -80,7 +80,7 @@ impl QwerkeysApp {
             .find(|t| *t as usize == state.theme_index.load(Ordering::SeqCst))
             .unwrap_or_default();
         let theme_colors = current_theme.colors();
-        cc.egui_ctx.set_visuals(current_theme.egui_visuals());
+        current_theme.apply_to(&cc.egui_ctx);
 
         let onboarding_done = crate::permissions::is_onboarding_done(
             crate::permissions::input_monitoring_granted(),
@@ -119,7 +119,7 @@ impl QwerkeysApp {
     pub(super) fn set_theme(&mut self, theme: AppTheme, ctx: &egui::Context) {
         self.current_theme = theme;
         self.theme_colors = theme.colors();
-        ctx.set_visuals(theme.egui_visuals());
+        theme.apply_to(ctx);
 
         // Save-on-change: remember the new theme in state, then snapshot settings
         self.state
